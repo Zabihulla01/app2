@@ -2177,12 +2177,6 @@ def stage1_analyze(stock: str, mode: str = "INTRADAY"):
         _log("ERROR", event="stage1_live_price_error", stock=sym, error=str(e))
 
     # ── 3. Two-stage analysis (may return NO TRADE — that's OK) ──────────
-    analysis = {}
-    try:
-        analysis = analyze(sym, mode=mode) or {}
-    except Exception as e:
-        _log("ERROR", event="stage1_analyze_error", stock=sym, error=str(e))
-
     # ── 4. Derive all values, backtest is the authoritative source ────────
     entry       = bt.get("EntryPrice",   0) or 0
     atr         = bt.get("ATR",          0) or 0

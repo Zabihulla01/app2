@@ -194,7 +194,7 @@ async function apiFetch(path, options = {}) {
     // GETs, while keeping POST/DELETE requests single-shot.
     const method = (options.method || "GET").toUpperCase();
     const attempts = method === "GET" ? 3 : 1;
-    const timeoutMs = options.timeoutMs || 150_000;
+    const timeoutMs = options.timeoutMs || 330_000;
     const fetchOptions = { ...options };
     delete fetchOptions.timeoutMs;
 
