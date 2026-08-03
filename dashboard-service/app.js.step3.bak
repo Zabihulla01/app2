@@ -1,0 +1,548 @@
+const API_URL = "http://100.53.40.154:8008";
+
+let currentStock = "INFY.NS";
+
+async function loadDashboard(
+    stock = currentStock,
+    mode = "INTRADAY"
+) {
+
+try {
+
+    const rankRes =
+        await fetch(`${API_URL}/rank/${stock}`);
+
+    const rankData =
+        await rankRes.json();
+    
+    if (
+      rankData.Status ===
+      "INVALID_STOCK"
+    ) {
+
+        alert(
+            "Invalid Stock Symbol"
+        );
+
+        return;
+    }
+
+    const backtestRes =
+    await fetch(
+        `${API_URL}/backtest/${stock}?mode=${mode}`
+    );
+
+const backtestData =
+    await backtestRes.json();
+
+const scanRes =
+    await fetch(`${API_URL}/scanner`);
+
+const scanData =
+    await scanRes.json();
+	const stockList =
+    document.getElementById(
+        "stocks"
+    );
+
+stockList.innerHTML = "";
+
+scanData.TopStocks.forEach(
+    item => {
+
+        stockList.innerHTML += `
+            <option value="${item.Stock}">
+        `;
+
+    }
+);
+
+	const stockSelect =
+    document.getElementById(
+        "stockSelect"
+    );
+
+stockSelect.innerHTML = "";
+
+scanData.TopStocks.forEach(
+    item => {
+
+        stockSelect.innerHTML += `
+            <option value="${item.Stock}">
+                ${item.Stock}
+            </option>
+        `;
+
+    }
+);
+
+stockSelect.value =
+    currentStock;
+
+    // =========================
+    // Scanner
+    // =========================
+
+    document.getElementById("scanner-results").innerHTML =
+        scanData.TopStocks
+        .map((s, index) => `
+
+            <div class="scanner-card">
+
+                <h3>
+                    ${
+                        index === 0 ? "🥇" :
+                        index === 1 ? "🥈" :
+                        index === 2 ? "🥉" : "📊"
+                    }
+                    ${s.Stock}
+                </h3>
+
+                <p>
+                    Signal:
+                    <b>${s.Signal || "WATCH"}</b>
+                </p>
+
+                <p>
+                    Score:
+                    <b>${s.Score || 0}</b>
+                </p>
+
+                <p>
+                    Confidence:
+                    <b>${s.Confidence}%</b>
+                </p>
+
+            </div>
+
+        `)
+        .join("");
+
+    // =========================
+    // Ranking Table
+    // =========================
+
+    const rankingBody =
+        document.querySelector(
+            "#ranking-table tbody"
+        );
+
+    rankingBody.innerHTML = "";
+
+    rankData.Ranking.forEach(item => {
+
+        rankingBody.innerHTML += `
+            <tr>
+                <td>${item[0]}</td>
+                <td>${item[1]}</td>
+            </tr>
+        `;
+
+    });
+
+    document.getElementById(
+        "best-strategy"
+    ).innerText =
+        rankData.Best;
+
+    // =========================
+    // Metrics
+    // =========================
+
+    document.getElementById(
+        "winrate"
+    ).innerText =
+        (backtestData.WinRate || 0) + "%";
+
+    document.getElementById(
+        "pf"
+    ).innerText =
+        backtestData.ProfitFactor || 0;
+
+    document.getElementById(
+        "sharpe"
+    ).innerText =
+        backtestData.Sharpe || 0;
+
+    document.getElementById(
+        "riskscore"
+    ).innerText =
+        backtestData.RiskScore || 0;
+
+    document.getElementById(
+        "trades"
+    ).innerText =
+        backtestData.Trades || 0;
+
+    document.getElementById(
+        "drawdown"
+    ).innerText =
+        (backtestData.MaxDrawdown || 0) + "%";
+
+    document.getElementById(
+        "entryprice"
+    ).innerText =
+        "$" + (backtestData.EntryPrice || "-");
+
+    document.getElementById(
+        "stoploss"
+    ).innerText =
+        "$" + (backtestData.StopLoss || "-");
+
+    document.getElementById(
+        "target"
+    ).innerText =
+        "$" + (backtestData.Target || "-");
+
+    const rr =
+        document.getElementById(
+            "riskreward"
+        );
+
+    if (rr) {
+
+        rr.innerText =
+            "1 : " +
+            (backtestData.RiskReward || "-");
+
+    }
+
+    document.getElementById(
+        "finalcapital"
+    ).innerText =
+        "$" +
+        (backtestData.FinalCapital || 0);
+
+    document.getElementById(
+        "benchmark"
+    ).innerText =
+        (backtestData.BenchmarkReturn || 0) +
+        "%";
+
+    document.getElementById(
+        "netprofit"
+    ).innerText =
+        "$" +
+        (backtestData.NetProfit || 0);
+
+    document.getElementById(
+        "lossstreak"
+    ).innerText =
+        backtestData.MaxLossStreak || 0;
+
+    // =========================
+    // Confidence
+    // =========================
+
+    const confidence =
+        document.getElementById(
+            "confidence"
+        );
+
+    confidence.innerText =
+        (backtestData.Confidence || 0) +
+        "%";
+
+    document.getElementById(
+    "mode"
+).innerText =
+    backtestData.Mode || "-";
+
+document.getElementById(
+    "atr"
+).innerText =
+    backtestData.ATR || 0;
+
+document.getElementById(
+    "risk"
+).innerText =
+    "₹" +
+    (backtestData.Risk || 0);
+
+document.getElementById(
+    "reward"
+).innerText =
+    "₹" +
+    (backtestData.Reward || 0);
+
+    const conf =
+        backtestData.Confidence || 0;
+
+    if (conf >= 80) {
+
+        confidence.style.color = "lime";
+
+    } else if (conf >= 60) {
+
+        confidence.style.color = "yellow";
+
+    } else {
+
+        confidence.style.color = "red";
+
+    }
+
+    // =========================
+    // Recommendation
+    // =========================
+
+    if(
+    backtestData.Status ===
+    "INSUFFICIENT_DATA"
+){
+    signal =
+    "INSUFFICIENT DATA";
+}
+
+    let signal = "AVOID";
+
+    if (
+        (backtestData.RiskScore || 0) >= 85
+    ) {
+
+        signal = "STRONG BUY";
+
+    }
+    else if (
+        (backtestData.RiskScore || 0) >= 70
+    ) {
+
+        signal = "BUY";
+
+    }
+    else if (
+        (backtestData.RiskScore || 0) >= 50
+    ) {
+
+        signal = "HOLD";
+
+    }
+
+    const rec =
+        document.getElementById(
+            "recommendation"
+        );
+
+    rec.innerText = signal;
+
+    if (signal === "STRONG BUY") {
+
+        rec.style.color = "lime";
+
+    }
+    else if (signal === "BUY") {
+
+        rec.style.color = "#00d4ff";
+
+    }
+    else if (signal === "HOLD") {
+
+        rec.style.color = "orange";
+
+    }
+    else {
+
+        rec.style.color = "red";
+
+    }
+
+    // =========================
+    // Strategy Chart
+    // =========================
+
+    const strategyLabels =
+        rankData.Ranking.map(
+            item => item[0]
+        );
+
+    const strategyValues =
+        rankData.Ranking.map(
+            item => item[1]
+        );
+
+    const strategyCtx =
+        document.getElementById(
+            "strategyChart"
+        );
+
+    if (
+    window.strategyChart &&
+    typeof window.strategyChart.destroy === "function"
+) {
+
+    window.strategyChart.destroy();
+
+}
+
+    window.strategyChart =
+        new Chart(strategyCtx, {
+
+            type: "bar",
+
+            data: {
+
+                labels:
+                    strategyLabels,
+
+                datasets: [{
+
+                    label:
+                        "Profit Factor",
+
+                    data:
+                        strategyValues
+
+                }]
+
+            }
+
+        });
+
+    // =========================
+    // Equity Curve
+    // =========================
+
+    const ctx =
+        document.getElementById(
+            "equityChart"
+        );
+
+    if (
+    window.myChart &&
+    typeof window.myChart.destroy === "function"
+) {
+
+    window.myChart.destroy();
+
+}
+    if(
+    !backtestData.EquityCurve ||
+    backtestData.EquityCurve.length === 0
+    ){
+    return;
+   }
+    window.myChart =
+        new Chart(ctx, {
+
+            type: "line",
+
+            data: {
+
+                labels:
+                    backtestData.Dates || [],
+
+                datasets: [{
+
+                    label:
+                        "Equity Curve",
+
+                    data:
+                        backtestData.EquityCurve || [],
+
+                    borderColor:
+                        "#00d4ff",
+
+                    tension: 0.4
+
+                }]
+
+            }
+
+        });
+
+}
+catch (err) {
+
+    console.error(err);
+    console.log("Current Stock:", stock);
+    console.log("Current Mode:", mode);
+    console.error("FULL ERROR:", err);
+
+    alert(
+        "ERROR: " +
+        err.message
+    );
+
+}
+
+}
+
+function analyzeStock() {
+
+	const mode =
+    document
+    .getElementById("tradingMode")
+    .value;
+
+console.log(
+    "Trading Mode:",
+    mode
+);
+
+    let stock =
+        document
+        .getElementById("stockSelect")
+        .value
+        .trim()
+        .toUpperCase();
+
+    if (!stock) {
+
+        alert("Enter Stock");
+
+        return;
+
+    }
+
+    // Auto add .NS
+    if (!stock.endsWith(".NS")) {
+
+        stock += ".NS";
+
+    }
+    document
+    .getElementById("stockSelect")
+    .value = stock;
+
+    currentStock = stock;
+
+    loadDashboard(stock, mode);
+
+}
+
+loadDashboard();
+loadAccuracy();
+
+setInterval(() => {
+
+    loadDashboard(currentStock);
+
+    loadAccuracy();
+
+}, 60000);	
+
+async function loadAccuracy() {
+
+    try {
+
+        const response =
+            await fetch(
+                "http://100.53.40.154:8008/accuracy"
+            );
+
+        const data =
+            await response.json();
+
+        document.getElementById(
+            "accuracy"
+        ).innerText =
+            data.Accuracy + "%";
+
+    } catch {
+
+        document.getElementById(
+            "accuracy"
+        ).innerText = "N/A";
+
+    }
+}

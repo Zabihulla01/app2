@@ -1,0 +1,140 @@
+import json
+import os
+import yfinance as yf
+
+FILE_PATH = "/data/prediction_history.json"
+
+def load_predictions():
+
+
+    if not os.path.exists(FILE_PATH):
+        return []
+
+    try:
+
+        with open(FILE_PATH, "r") as f:
+
+            return json.load(f)
+
+    except:
+
+        return []
+
+
+def save_prediction(prediction):
+
+    data = load_predictions()
+
+    compact_prediction = {
+
+        "Stock": prediction["Stock"],
+        "EntryPrice": prediction["EntryPrice"],
+        "Target": prediction["Target"],
+        "StopLoss": prediction["StopLoss"],
+        "Mode": prediction["Mode"],
+        "Confidence": prediction["Confidence"]
+
+    }
+
+    for item in data:
+
+        if (
+            item.get("Stock")
+            ==
+            compact_prediction.get("Stock")
+        ):
+
+            return False
+
+    data.append(compact_prediction)
+
+    if len(data) > 1000:
+
+        data = data[-1000:]
+
+    with open(FILE_PATH, "w") as f:
+
+        json.dump(
+            data,
+            f,
+            indent=4
+        )
+
+    return True
+
+def check_prediction(prediction):
+
+    stock = prediction["Stock"]
+
+    try:
+
+        df = yf.download(
+            stock,
+            period="5d",
+            progress=False
+        )
+
+        if df.empty:
+
+            return "UNKNOWN"
+
+        current_price = float(
+            df["Close"].iloc[-1].item() 
+        )
+
+        if current_price >= prediction["Target"]:
+
+            return "WIN"
+
+        if current_price <= prediction["StopLoss"]:
+
+            return "LOSS"
+
+        return "OPEN"
+
+    except Exception as e:
+
+        print("CHECK ERROR:", e)
+
+        return "UNKNOWN"
+
+
+def calculate_accuracy():
+
+    predictions = load_predictions()
+
+    wins = 0
+    losses = 0
+    open_count = 0
+
+    for item in predictions:
+
+        status = check_prediction(item)
+
+        if status == "WIN":
+            wins += 1
+
+        elif status == "LOSS":
+            losses += 1
+
+        else:
+            open_count += 1
+
+    total_closed = wins + losses
+
+    accuracy = 0
+
+    if total_closed > 0:
+
+        accuracy = round(
+            (wins / total_closed) * 100,
+            2
+        )
+
+    return {
+        "Accuracy": accuracy,
+        "Wins": wins,
+        "Losses": losses,
+        "Open": open_count,
+        "Total": len(predictions)
+    }

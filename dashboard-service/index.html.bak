@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Trading Analysis Dashboard</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<div class="sidebar">
+
+    <h2>AI TRADING</h2>
+
+    <ul>
+        <li>Dashboard</li>
+        <li>Strategy Analysis</li>
+        <li>Backtesting</li>
+        <li>Risk Metrics</li>
+        <li>Performance</li>
+    </ul>
+
+</div>
+
+<div class="main">
+
+
+	<div class="main">
+
+    <div class="search-box">
+
+        <input
+    type="text"
+    id="stockSelect"
+    list="stocks"
+    placeholder="Search Stock"
+/>
+
+<datalist id="stocks">
+
+    <option value="AAPL">
+    <option value="MSFT">
+    <option value="NVDA">
+    <option value="TCS.NS">
+    <option value="INFY.NS">
+    <option value="RELIANCE.NS">
+    <option value="TATAPOWER.NS">
+
+</datalist>
+
+        <button onclick="analyzeStock()">
+    Analyze
+</button>
+
+    </div>
+
+    <!-- Win Rate Cards -->
+    <!-- Equity Chart -->
+    <!-- Strategy Ranking -->
+
+</div>
+
+    <!-- TOP METRICS -->
+
+    <div class="top-cards">
+
+        <div class="card">
+            <h3>Win Rate</h3>
+            <h1 id="winrate">0%</h1>
+        </div>
+
+        <div class="card">
+            <h3>Profit Factor</h3>
+            <h1 id="pf">0</h1>
+        </div>
+
+        <div class="card">
+            <h3>Sharpe Ratio</h3>
+            <h1 id="sharpe">0</h1>
+        </div>
+
+        <div class="card">
+            <h3>Risk Score</h3>
+            <h1 id="riskscore">0</h1>
+        </div>
+
+        <div class="card">
+            <h3>Trades</h3>
+            <h1 id="trades">0</h1>
+        </div>
+
+        <div class="card">
+            <h3>Drawdown</h3>
+            <h1 id="drawdown">0%</h1>
+        </div>
+         <div class="card">
+    <h3>Stop Loss</h3>
+    <h1 id="stoploss">-</h1>
+</div>
+<div class="card">
+    <h3>Target</h3>
+    <h1 id="target">-</h1>
+</div>
+
+<div class="card">
+    <h3>Entry Price</h3>
+    <h1 id="entryprice">-</h1>
+</div>
+
+<div class="card">
+    <h3>Risk Reward</h3>
+    <h1 id="riskreward">-</h1>
+</div>
+
+<div class="card">
+    <h3>AI Confidence</h3>
+    <h1 id="confidence">0%</h1>
+</div>
+</div>
+    </div>
+
+    <!-- BEST STRATEGY -->
+
+   <div class="card strategy-card">
+
+    <h3>Top Opportunities</h3>
+
+    <div id="scanner-results">
+        Loading...
+    </div>
+
+</div>
+
+<div class="card strategy-card">
+
+    <h3>Best Strategy</h3>
+
+        <h1 id="best-strategy">-</h1>
+
+	<div class="card">
+
+		    <h3>AI Recommendation</h3>
+
+		        <h1 id="recommendation">WAIT</h1>
+
+	</div>
+
+    </div>
+
+    <!-- EQUITY CURVE -->
+
+    <div class="chart-box">
+
+        <h2>Equity Curve</h2>
+
+        <canvas id="equityChart"></canvas>
+
+    </div>
+
+    <!-- SUMMARY TABLE -->
+
+    <div class="table-box">
+
+        <h2>Backtest Summary</h2>
+
+        <table id="summary-table">
+
+            <thead>
+
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                <tr>
+                    <td>Final Capital</td>
+                    <td id="finalcapital">$0</td>
+                </tr>
+
+                <tr>
+                    <td>Net Profit</td>
+                    <td id="netprofit">$0</td>
+                </tr>
+
+                <tr>
+                    <td>Benchmark Return</td>
+                    <td id="benchmark">0%</td>
+                </tr>
+
+                <tr>
+                    <td>Max Loss Streak</td>
+                    <td id="lossstreak">0</td>
+                </tr>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+<!-- STRATEGY RANKING -->
+
+<div class="ranking-panel">
+
+	<div class="chart-box">
+    <h2>Strategy Comparison</h2>
+    <canvas id="strategyChart"></canvas>
+</div>
+
+    <h3>Strategy Ranking</h3>
+
+    <table id="ranking-table">
+
+        <thead>
+
+            <tr>
+                <th>Strategy</th>
+                <th>Profit Factor</th>
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+        </tbody>
+
+    </table>
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</htmlg

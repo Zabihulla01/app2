@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+yfinance
+ta
+numpy
+pandas
+prometheus-client
+pytest
+httpx
+requests==2.31.0

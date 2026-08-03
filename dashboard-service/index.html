@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Trading Terminal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-top">
+    <h1>🚀 AI Trading Terminal</h1>
+    <div id="header-stage-badge" class="header-badge">STAGE 0 — CRYPTO SEARCH</div>
+  </div>
+
+  <!-- Stage Pipeline indicator -->
+  <div class="pipeline">
+    <div class="pipe-step active" id="pipe-0" onclick="goToStage(0)">
+      <span class="pipe-num">0</span>
+      <span class="pipe-lbl">Selection</span>
+    </div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" id="pipe-1" onclick="goToStage(1)">
+      <span class="pipe-num">1</span>
+      <span class="pipe-lbl">Analysis</span>
+    </div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" id="pipe-2" onclick="goToStage(2)">
+      <span class="pipe-num">2</span>
+      <span class="pipe-lbl">Trade Setup</span>
+    </div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" id="pipe-3" onclick="goToStage(3)">
+      <span class="pipe-num">3</span>
+      <span class="pipe-lbl">Lock</span>
+    </div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" id="pipe-4" onclick="goToStage(4)">
+      <span class="pipe-num">4</span>
+      <span class="pipe-lbl">Protection</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STAGE 0 — Crypto Search
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="stage-panel" id="panel-0">
+
+  <!-- Hero search card -->
+  <div class="s0-hero">
+    <div class="s0-hero-logo">
+      <span class="s0-hero-icon">₿</span>
+    </div>
+    <h2 class="s0-hero-title">Crypto Market Analysis</h2>
+    <p class="s0-hero-sub">Search for any cryptocurrency to run a full technical analysis</p>
+
+    <!-- Search bar -->
+    <div class="s0-search-wrap" id="s0-search-wrap">
+      <div class="s0-search-box">
+        <span class="search-icon">🔎</span>
+        <input
+          type="text"
+          id="s0-manual-input"
+          class="s0-search-input"
+          placeholder="Search crypto… BTC, ETH, SOL, BNB…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="search-clear-btn" id="s0-clear-btn" onclick="clearSearch()" title="Clear" style="display:none">✕</button>
+      </div>
+      <!-- dropdown rendered by JS -->
+      <div class="search-dropdown" id="search-dropdown"></div>
+    </div>
+
+    <!-- Search button -->
+    <button class="btn-search" id="s0-analyze-btn" onclick="manualSelectSymbol()">
+      <span id="analyze-btn-text">🔍 Search &amp; Analyze</span>
+      <span id="analyze-btn-spinner" class="btn-spinner" style="display:none"></span>
+    </button>
+
+    <!-- Error message -->
+    <div id="s0-error-msg" class="s0-error" style="display:none"></div>
+  </div>
+
+  <!-- Popular coins quick-pick -->
+  <div class="s0-popular">
+    <div class="s0-popular-label">Popular</div>
+    <div class="s0-popular-chips" id="s0-popular-chips">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STAGE 1 — Market Analysis Engine
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="stage-panel hidden" id="panel-1">
+  <div class="stage-header">
+    <div class="stage-badge s1">STAGE 1</div>
+    <div class="stage-title">Market Analysis Engine</div>
+    <div class="stage-desc">Full technical analysis — no trade recommendation yet</div>
+    <div class="stage-sym" id="s1-sym-label">—</div>
+  </div>
+
+  <!-- Row 0: live price band -->
+  <div class="analysis-grid g3">
+    <div class="a-card hi">
+      <div class="a-lbl">Live Price</div>
+      <div class="a-val large" id="s1-price">—</div>
+      <div class="a-sub" id="s1-change">24h: —</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Volume 24h</div>
+      <div class="a-val" id="s1-vol">—</div>
+      <div class="a-sub" id="s1-mcap">MCap: —</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Market Health</div>
+      <div class="a-val" id="s1-health">—</div>
+      <div class="a-sub" id="s1-mode-lbl">Mode: —</div>
+    </div>
+  </div>
+
+  <!-- Row 1: Trend -->
+  <div class="grp-lbl">📈 Trend &amp; Market Structure</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">Trend</div>
+      <div class="a-val" id="s1-trend">—</div>
+      <div class="a-sub">EMA alignment</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Trend Strength</div>
+      <div class="a-val" id="s1-tstr">—</div>
+      <div class="a-sub" id="s1-tstr-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Market Structure</div>
+      <div class="a-val" id="s1-struct">—</div>
+      <div class="a-sub">HH/HL or LH/LL</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Structure Break</div>
+      <div class="a-val" id="s1-bos">—</div>
+      <div class="a-sub">BOS / CHoCH</div>
+    </div>
+  </div>
+
+  <!-- Row 2: EMAs -->
+  <div class="grp-lbl">📊 Moving Averages</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">EMA 20</div>
+      <div class="a-val" id="s1-ema20">—</div>
+      <div class="a-sub" id="s1-ema20-sub">Short-term trend</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">EMA 50</div>
+      <div class="a-val" id="s1-ema50">—</div>
+      <div class="a-sub" id="s1-ema50-sub">Mid-term trend</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">EMA 200</div>
+      <div class="a-val" id="s1-ema200">—</div>
+      <div class="a-sub" id="s1-ema200-sub">Long-term trend</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">EMA Alignment</div>
+      <div class="a-val" id="s1-ema-align">—</div>
+      <div class="a-sub">20 / 50 / 200 stack</div>
+    </div>
+  </div>
+
+  <!-- Row 3: Momentum -->
+  <div class="grp-lbl">⚡ Momentum Indicators</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">RSI</div>
+      <div class="a-val" id="s1-rsi">—</div>
+      <div class="a-sub" id="s1-rsi-zone">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">MACD</div>
+      <div class="a-val" id="s1-macd">—</div>
+      <div class="a-sub" id="s1-macd-sub">Signal line cross</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Bollinger Bands</div>
+      <div class="a-val" id="s1-bb">—</div>
+      <div class="a-sub" id="s1-bb-sub">Band position</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Multi-TF Confirm</div>
+      <div class="a-val" id="s1-mtf">—</div>
+      <div class="a-sub" id="s1-mtf-sub">Timeframe alignment</div>
+    </div>
+  </div>
+
+  <!-- Row 4: Volatility -->
+  <div class="grp-lbl">🌊 Volatility &amp; Range</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">ATR</div>
+      <div class="a-val" id="s1-atr">—</div>
+      <div class="a-sub">Average True Range</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Volatility</div>
+      <div class="a-val" id="s1-vol2">—</div>
+      <div class="a-sub" id="s1-vol2-sub">ATR-relative</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Support</div>
+      <div class="a-val val-up" id="s1-support">—</div>
+      <div class="a-sub">Key demand zone</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Resistance</div>
+      <div class="a-val val-down" id="s1-resist">—</div>
+      <div class="a-sub">Key supply zone</div>
+    </div>
+  </div>
+
+  <!-- Row 5: Sentiment -->
+  <div class="grp-lbl">💧 Liquidity &amp; Sentiment</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">Liquidity</div>
+      <div class="a-val" id="s1-liq">—</div>
+      <div class="a-sub" id="s1-liq-sub">Volume vs avg</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Fear &amp; Greed</div>
+      <div class="a-val" id="s1-fg">—</div>
+      <div class="a-sub" id="s1-fg-sub">Market sentiment</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Risk Score</div>
+      <div class="a-val" id="s1-risk">—</div>
+      <div class="a-sub" id="s1-risk-sub">0 = low  100 = high</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Confidence Score</div>
+      <div class="a-val" id="s1-conf">—</div>
+      <div class="a-sub" id="s1-conf-sub">Signal confidence</div>
+    </div>
+  </div>
+
+  <!-- Analysis Summary -->
+  <div class="summary-box">
+    <div class="summary-title">📋 Analysis Summary</div>
+    <div class="summary-grid" id="s1-summary-grid"></div>
+    <div class="summary-note">
+      ⚠️ Stage 1 outputs analysis only — no trade recommendation is made at this stage.
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="stage-cta">
+    <button class="btn-next" id="s1-next-btn" onclick="goToStage(2)">
+      ➜ Proceed to Stage 2 — Trade Recommendation
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STAGE 2 — Trade Recommendation
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="stage-panel hidden" id="panel-2">
+  <div class="stage-header">
+    <div class="stage-badge s2">STAGE 2</div>
+    <div class="stage-title">Trade Recommendation</div>
+    <div class="stage-desc">One clear setup — or WAIT if conditions aren't right</div>
+    <div class="stage-sym" id="s2-sym-label">—</div>
+  </div>
+
+  <!-- Decision banner -->
+  <div class="decision-banner" id="s2-decision-banner">
+    <div class="dec-action" id="s2-action">—</div>
+    <div class="dec-conf" id="s2-conf-pct">—</div>
+    <div class="dec-reason" id="s2-reason">—</div>
+  </div>
+
+  <!-- Trade setup grid (hidden when WAIT/NO TRADE) -->
+  <div id="s2-setup-wrap">
+    <div class="grp-lbl">📐 Trade Setup</div>
+    <div class="analysis-grid g3">
+      <div class="a-card hi">
+        <div class="a-lbl">Direction</div>
+        <div class="a-val large" id="s2-dir">—</div>
+        <div class="a-sub" id="s2-mode-lbl">—</div>
+      </div>
+      <div class="a-card">
+        <div class="a-lbl">Entry Price</div>
+        <div class="a-val" id="s2-entry">—</div>
+        <div class="a-sub">Recommended entry</div>
+      </div>
+      <div class="a-card">
+        <div class="a-lbl">Stop Loss</div>
+        <div class="a-val val-down" id="s2-sl">—</div>
+        <div class="a-sub" id="s2-risk-amt">Risk: —</div>
+      </div>
+    </div>
+
+    <div class="grp-lbl">🎯 Targets</div>
+    <div class="analysis-grid g4">
+      <div class="a-card">
+        <div class="a-lbl">TP 1</div>
+        <div class="a-val val-up" id="s2-tp1">—</div>
+        <div class="a-sub">First target</div>
+      </div>
+      <div class="a-card">
+        <div class="a-lbl">TP 2</div>
+        <div class="a-val val-up" id="s2-tp2">—</div>
+        <div class="a-sub">Primary target</div>
+      </div>
+      <div class="a-card">
+        <div class="a-lbl">TP 3</div>
+        <div class="a-val val-up" id="s2-tp3">—</div>
+        <div class="a-sub">Full target</div>
+      </div>
+      <div class="a-card hi">
+        <div class="a-lbl">Risk / Reward</div>
+        <div class="a-val" id="s2-rr">—</div>
+        <div class="a-sub">R:R ratio</div>
+      </div>
+    </div>
+
+    <!-- Why this trade -->
+    <div class="why-box" id="s2-why-box">
+      <div class="why-title">🧠 Why this trade</div>
+      <div id="s2-why-body">—</div>
+    </div>
+  </div>
+
+  <!-- WAIT / NO TRADE block -->
+  <div id="s2-wait-wrap" class="wait-block" style="display:none">
+    <div class="wait-icon">⏸</div>
+    <div class="wait-title">WAIT — NO TRADE</div>
+    <div class="wait-reason" id="s2-wait-reason">Conditions not met. Wait for a stronger setup.</div>
+  </div>
+
+  <!-- CTA -->
+  <div class="stage-cta" id="s2-cta">
+    <button class="btn-lock" id="s2-lock-btn" onclick="lockPosition()">
+      🔒 Lock Position — Enter Stage 3
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STAGE 3 — Lock Position
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="stage-panel hidden" id="panel-3">
+  <div class="stage-header">
+    <div class="stage-badge s3">STAGE 3</div>
+    <div class="stage-title">Position Locked</div>
+    <div class="stage-desc">Trade setup is frozen. System enters Protection Mode.</div>
+    <div class="stage-sym" id="s3-sym-label">—</div>
+  </div>
+
+  <!-- Locked position card -->
+  <div class="lock-card" id="s3-lock-card">
+    <div class="lock-header">
+      <div class="lock-symbol" id="s3-lock-sym">—</div>
+      <div class="lock-dir" id="s3-lock-dir">—</div>
+      <div class="lock-time">🕐 Locked: <span id="s3-lock-time">—</span></div>
+    </div>
+
+    <div class="analysis-grid g3" style="margin-top:16px">
+      <div class="a-card hi">
+        <div class="a-lbl">Entry</div>
+        <div class="a-val large" id="s3-entry">—</div>
+        <div class="a-sub">Locked entry price</div>
+      </div>
+      <div class="a-card">
+        <div class="a-lbl">Stop Loss</div>
+        <div class="a-val val-down" id="s3-sl">—</div>
+        <div class="a-sub">Frozen stop</div>
+      </div>
+      <div class="a-card">
+        <div class="a-lbl">Risk / Reward</div>
+        <div class="a-val" id="s3-rr">—</div>
+        <div class="a-sub">R:R ratio</div>
+      </div>
+    </div>
+
+    <div class="analysis-grid g3" style="margin-top:12px">
+      <div class="a-card">
+        <div class="a-lbl">TP 1</div>
+        <div class="a-val val-up" id="s3-tp1">—</div>
+      </div>
+      <div class="a-card">
+        <div class="a-lbl">TP 2</div>
+        <div class="a-val val-up" id="s3-tp2">—</div>
+      </div>
+      <div class="a-card">
+        <div class="a-lbl">TP 3</div>
+        <div class="a-val val-up" id="s3-tp3">—</div>
+      </div>
+    </div>
+
+    <div class="lock-note">
+      🔒 No new BUY or SELL analysis will replace this trade while the position is locked.
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="stage-cta">
+    <button class="btn-protect" onclick="goToStage(4)">
+      🛡️ Activate AI Protection Manager — Stage 4
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STAGE 4 — AI Protection Manager
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="stage-panel hidden" id="panel-4">
+  <div class="stage-header">
+    <div class="stage-badge s4">STAGE 4</div>
+    <div class="stage-title">AI Protection Manager</div>
+    <div class="stage-desc">Protecting capital and maximising profit — monitoring continuously</div>
+    <div class="stage-sym" id="s4-sym-label">—</div>
+  </div>
+
+  <!-- Action banner -->
+  <div class="protect-banner" id="s4-action-banner">
+    <div class="protect-action" id="s4-action">—</div>
+    <div class="protect-reason" id="s4-reason">Waiting for first update…</div>
+  </div>
+
+  <!-- Live metrics -->
+  <div class="grp-lbl">📡 Live Position Monitor</div>
+  <div class="analysis-grid g4">
+    <div class="a-card hi">
+      <div class="a-lbl">Live Price</div>
+      <div class="a-val large" id="s4-price">—</div>
+      <div class="a-sub">Current market price</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Live PnL</div>
+      <div class="a-val" id="s4-pnl">—</div>
+      <div class="a-sub">% from entry</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Holding Time</div>
+      <div class="a-val" id="s4-hold">—</div>
+      <div class="a-sub">Minutes since lock</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Higher TF Trend</div>
+      <div class="a-val" id="s4-htf">—</div>
+      <div class="a-sub">Macro direction</div>
+    </div>
+  </div>
+
+  <!-- Distances -->
+  <div class="grp-lbl">📏 Distances to Levels</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">To TP1</div>
+      <div class="a-val val-up" id="s4-d-tp1">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">To TP2</div>
+      <div class="a-val val-up" id="s4-d-tp2">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">To TP3</div>
+      <div class="a-val val-up" id="s4-d-tp3">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">To Stop Loss</div>
+      <div class="a-val val-down" id="s4-d-sl">—</div>
+    </div>
+  </div>
+
+  <!-- Indicators -->
+  <div class="grp-lbl">⚡ Market Indicators</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">RSI</div>
+      <div class="a-val" id="s4-rsi">—</div>
+      <div class="a-sub" id="s4-rsi-zone">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">ADX</div>
+      <div class="a-val" id="s4-adx">—</div>
+      <div class="a-sub">Trend strength</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">MACD</div>
+      <div class="a-val" id="s4-macd">—</div>
+      <div class="a-sub" id="s4-macd-sub">vs Signal line</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">ATR (Volatility)</div>
+      <div class="a-val" id="s4-atr">—</div>
+      <div class="a-sub" id="s4-atr-sub">Average True Range</div>
+    </div>
+  </div>
+
+  <!-- Locked position recap (compact) -->
+  <div class="grp-lbl">🔒 Locked Trade Reference</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">Entry</div>
+      <div class="a-val" id="s4-ref-entry">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Stop Loss</div>
+      <div class="a-val val-down" id="s4-ref-sl">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">TP2 Target</div>
+      <div class="a-val val-up" id="s4-ref-tp2">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">TP3 Target</div>
+      <div class="a-val val-up" id="s4-ref-tp3">—</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="s4-controls">
+    <button class="btn-refresh" id="s4-refresh-btn" onclick="refreshProtection()">
+      🔄 Refresh Now
+    </button>
+    <div class="s4-auto-wrap">
+      <label class="toggle-label">
+        <input type="checkbox" id="s4-auto-toggle" onchange="toggleAutoRefresh()" />
+        Auto-refresh every 60 s
+      </label>
+    </div>
+    <button class="btn-close-trade" onclick="closeTrade()">
+      ✅ Close Trade &amp; Return to Stage 0
+    </button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

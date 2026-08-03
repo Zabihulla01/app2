@@ -1,0 +1,214 @@
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial,sans-serif;
+}
+
+body{
+    display:flex;
+    background:#050816;
+    color:white;
+}
+
+/* SIDEBAR */
+
+.sidebar{
+    width:240px;
+    min-height:100vh;
+    background:#0b1020;
+    padding:20px;
+    border-right:1px solid #1e293b;
+}
+
+.sidebar h2{
+    color:#00d4ff;
+    margin-bottom:30px;
+}
+
+.sidebar ul{
+    list-style:none;
+}
+
+.sidebar li{
+    background:#111827;
+    padding:15px;
+    margin-bottom:10px;
+    border-radius:10px;
+    cursor:pointer;
+}
+
+.sidebar li:hover{
+    background:#1e293b;
+}
+
+/* MAIN */
+
+.main{
+    flex:1;
+    padding:20px;
+}
+
+/* HEADER */
+
+.header{
+    margin-bottom:20px;
+}
+
+.header h1{
+    margin-bottom:15px;
+    color:#00d4ff;
+}
+
+/* SEARCH */
+
+.search-box{
+    display:flex;
+    gap:10px;
+}
+
+.search-box input{
+    flex:1;
+    padding:12px;
+    border-radius:10px;
+    border:1px solid #00d4ff;
+    background:#111827;
+    color:white;
+}
+
+.search-box button{
+    padding:12px 20px;
+    border:none;
+    border-radius:10px;
+    background:#00d4ff;
+    color:black;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+/* TOP CARDS */
+
+.top-cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:15px;
+    margin-bottom:20px;
+}
+
+.card{
+    background:#0f172a;
+    padding:20px;
+    border-radius:15px;
+    border:1px solid #1e293b;
+    box-shadow:0 0 12px rgba(0,212,255,0.08);
+}
+
+.card h3{
+    color:#94a3b8;
+    margin-bottom:10px;
+}
+
+.card h1{
+    color:#00ff99;
+}
+
+/* PANELS */
+
+.panel{
+    background:#0f172a;
+    border:1px solid #1e293b;
+    border-radius:15px;
+    padding:20px;
+    margin-bottom:20px;
+}
+
+.panel h2{
+    color:#00d4ff;
+    margin-bottom:15px;
+}
+
+/* TABLES */
+
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+table th,
+table td{
+    padding:12px;
+    border-bottom:1px solid #1e293b;
+    text-align:left;
+}
+
+table th{
+    color:#00d4ff;
+}
+
+/* CHART */
+
+canvas{
+    width:100% !important;
+    max-width:100%;
+}
+
+/* SCANNER */
+
+#scanner-results div{
+    background:#111827;
+    padding:10px;
+    border-radius:10px;
+    margin-bottom:8px;
+}
+
+/* MOBILE */
+
+@media (max-width:768px){
+
+    body{
+        flex-direction:column;
+    }
+
+    .sidebar{
+        width:100%;
+        min-height:auto;
+    }
+
+    .main{
+        padding:12px;
+    }
+
+    .search-box{
+        flex-direction:column;
+    }
+
+    .top-cards{
+        grid-template-columns:1fr;
+    }
+
+    .card h1{
+        font-size:22px;
+    }
+
+    .panel{
+        padding:15px;
+    }
+}
+
+#tradingMode {
+
+    padding: 10px;
+
+    border-radius: 8px;
+
+    margin-left: 10px;
+
+    background: #0f172a;
+
+    color: white;
+
+    border: 1px solid #00d4ff;
+
+    cursor: pointer;
+
+}

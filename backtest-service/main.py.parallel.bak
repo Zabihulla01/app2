@@ -1,0 +1,1823 @@
+from fastapi import FastAPI
+import yfinance as yf
+import numpy as np
+import pandas as pd
+
+
+from accuracy import (
+    save_prediction,
+    load_predictions,
+    check_prediction,
+    calculate_accuracy
+
+)
+
+import csv
+
+from datetime import datetime
+
+from validation import split_data
+from walkforward_eval import evaluate
+from config import *
+from walkforward import walkforward_split
+
+from indicators import add_indicators
+from market_filter import market_trend
+from strategy import generate_signal
+from risk import calculate_profit
+from optimizer import optimize_stock
+from scoring import risk_score
+from prometheus_client import Counter
+from prometheus_client import generate_latest
+from prometheus_client import Gauge
+from fastapi.responses import Response
+from strategy import ema_strategy
+from strategy import ema_signal
+from strategy import rsi_signal
+from fastapi.middleware.cors import CORSMiddleware
+
+
+SCAN_STOCKS = [
+
+"RELIANCE.NS",
+"TCS.NS",
+"INFY.NS",
+"HDFCBANK.NS",
+"ICICIBANK.NS",
+"SBIN.NS",
+"LT.NS",
+"BHARTIARTL.NS",
+"TATAMOTORS.NS",
+"TATAPOWER.NS",
+
+"AXISBANK.NS",
+"KOTAKBANK.NS",
+"INDUSINDBK.NS",
+"BAJFINANCE.NS",
+"BAJAJFINSV.NS",
+
+"MARUTI.NS",
+"M&M.NS",
+"EICHERMOT.NS",
+
+"ADANIPORTS.NS",
+"ADANIENT.NS",
+
+"HINDUNILVR.NS",
+"ITC.NS",
+"NESTLEIND.NS",
+
+"ASIANPAINT.NS",
+"ULTRACEMCO.NS",
+
+"SUNPHARMA.NS",
+"DRREDDY.NS",
+
+"WIPRO.NS",
+"TECHM.NS",
+
+"POWERGRID.NS"
+
+]
+
+app = FastAPI()
+
+app.add_middleware(
+
+    CORSMiddleware,
+
+    allow_origins=["*"],
+
+    allow_credentials=True,
+
+    allow_methods=["*"],
+
+    allow_headers=["*"],
+
+)
+
+REQUESTS = Counter(
+
+    "api_requests_total",
+
+    "Total API requests"
+
+)
+
+BACKTEST_RUNS = Counter(
+
+    "backtest_runs_total",
+
+    "Total backtests"
+
+)
+
+
+YF_REQUESTS = Counter(
+
+    "yf_requests_total",
+
+    "Total yfinance requests"
+
+)
+
+ADX_PF = Gauge(
+
+    "adx_profit_factor",
+
+    "ADX profit factor"
+
+)
+
+EMA_PF = Gauge(
+
+    "ema_profit_factor",
+
+    "EMA profit factor"
+
+)
+
+RSI_PF = Gauge(
+
+    "rsi_profit_factor",
+
+    "RSI profit factor"
+
+)
+
+YF_ERRORS = Counter(
+
+    "yf_errors_total",
+
+    "Total yfinance failures"
+
+)
+
+PAPER_BALANCE = 10000
+
+PAPER_POSITIONS = []
+
+
+
+@app.get("/backtest/{stock}")
+def backtest(
+
+
+    stock:str,
+
+    mode:str = "INTRADAY",
+
+    adx_min:int=None,
+
+    hold:int=None,
+
+    target_rr:float=None
+
+):
+    REQUESTS.inc()
+    BACKTEST_RUNS.inc()
+    YF_REQUESTS.inc()
+
+
+    cfg = SECTOR_CONFIG.get(
+
+        stock,
+
+        {
+
+            "adx":25,
+
+            "hold":12,
+
+            "rr":2
+
+        }
+
+    )
+
+
+    adx_min = adx_min or cfg["adx"]
+
+    hold = hold or cfg["hold"]
+
+    target_rr = target_rr or cfg["rr"]
+
+
+
+    try:
+
+        df = yf.download(
+
+            stock,
+
+            period=PERIOD,
+
+            interval=INTERVAL,
+
+            auto_adjust=True
+
+        )
+
+        if df.empty:
+
+           return {
+               "Status": "INVALID_STOCK",
+               "Stock": stock,
+               "Score": 0,
+               "Confidence": 0
+        }
+
+        benchmark_return = round(
+
+        (
+
+            (
+
+                df["Close"]
+
+                .iloc[-1].item() 
+
+                -
+
+                df["Close"]
+
+                .iloc[0].item() 
+
+            )
+
+            /
+
+            df["Close"]
+
+            .iloc[0].item()
+
+        ) * 100,
+
+        2
+
+    )
+
+
+        if df.empty:
+
+            return {
+
+                "error":
+
+                "No market data"
+
+            }
+
+
+    except Exception as e:
+
+        YF_ERRORS.inc()
+
+
+        return {
+
+            "error":
+
+            str(
+
+                e
+
+            )
+
+        }
+
+
+    splits = walkforward_split(
+
+        df
+
+    )
+    if len(
+
+        splits
+
+    ) == 0:
+        return {
+
+            "error":
+              "No validation windows"
+
+        }
+
+
+
+    train, test = splits[-1]
+
+
+
+    df = test
+
+
+
+    df1h = yf.download(
+
+        stock,
+
+        period=PERIOD,
+
+        interval="1h",
+
+        auto_adjust=True,
+        threads=False
+
+    )
+
+
+
+    if len(df) < 100:
+
+        return {
+
+            "Stock":
+
+            stock,
+
+            "error":
+
+            "Not enough data"
+
+        }
+
+
+
+    df = add_indicators(
+
+        df
+
+    )
+
+
+
+    bull_1h = market_trend(
+       df1h["Close"].iloc[:,0]
+    )
+
+
+
+    wins=0
+    losses=0
+
+    current_loss_streak = 0
+
+    max_loss_streak = 0
+
+    gp=0
+    gl=0
+
+    returns=[]
+
+    capital = INITIAL_CAPITAL
+
+    equity_curve = []
+
+
+
+    start = max(
+            50,
+            hold
+            ) 
+    for i in range(
+            start, 
+            len(df)-hold
+            ):
+
+
+
+        signal = generate_signal(
+
+            df,
+
+            i,
+
+            adx_min,
+
+            bull_1h
+
+        )
+        
+
+
+
+        if signal=="HOLD":
+
+            continue
+
+
+
+        current=float(
+
+            df["Close"]
+
+            .iloc[i]
+
+            .item()
+
+        )
+
+
+
+        future=float(
+
+            df["Close"]
+
+            .iloc[i+hold]
+
+            .item()
+
+        )
+
+
+
+        move=(
+
+            future-current
+
+        ) if signal=="BUY" else (
+
+            current-future
+
+        )
+
+
+
+        profit=calculate_profit(
+
+            move,
+
+            df["ATR"]
+
+            .iloc[i],
+
+            target_rr
+
+        
+        )
+        profit -= 0.02
+
+     
+
+
+        profit -= (
+
+        current *
+
+        SLIPPAGE
+
+       ) 
+
+
+
+        returns.append(
+
+            profit
+
+        )
+
+
+        position_size = capital * RISK_PER_TRADE
+
+        capital += (
+
+                profit *
+
+                position_size
+
+                ) / 100
+ 
+        equity_curve.append(
+
+        round(capital,2)
+
+          )
+
+
+
+
+        if profit>0:
+
+            wins+=1
+
+            gp+=profit
+
+            current_loss_streak = 0
+
+
+        else:
+
+            losses+=1
+
+            gl+=abs(
+
+                profit
+
+            )
+            current_loss_streak += 1
+
+            max_loss_streak = max(
+
+            max_loss_streak,
+
+            current_loss_streak
+
+             )
+
+
+
+    total=wins+losses
+
+
+
+    # skip low confidence
+
+    if total < 20:
+
+
+        return {
+
+            "Stock":
+
+            stock,
+
+
+            "Validation":
+
+            "70_train_30_test",
+
+
+            "Warning":
+
+            "Too few trades",
+
+
+            "Trades":
+
+            total ,
+            
+            "WinRate": 0,
+            "Risk": 0,
+            "Reward": 0,
+            "ProfitFactor": 0,
+            "Sharpe": 0,
+            "MaxDrawdown": 0,
+            "MaxLossStreak": 0,
+            "NetProfit": 0,
+            "InitialCapital": 10000,
+            "FinalCapital": 10000,
+            "BenchmarkReturn": 0,
+            "StopLoss": 0,
+            "Target": 0,
+            "EntryPrice": 0,
+            "RiskReward": 0,
+            "Confidence": 0,
+            "RiskScore": 0,
+           "EquityCurve": [],
+           "Dates": []
+
+        }
+
+
+
+    pf=(gp/gl) if gl else 0
+
+
+
+    sharpe=(
+
+        np.mean(
+
+            returns
+
+        )
+
+        /
+
+        np.std(
+
+            returns
+
+        )
+
+    ) if (
+
+        len(returns)>1
+
+        and
+
+        np.std(
+
+            returns
+
+        )>0
+
+    ) else 0
+
+
+
+    cumulative=np.cumsum(
+
+
+        returns
+
+    )
+
+    net_profit = round(
+
+    float(
+
+        cumulative[-1]
+
+    ),
+
+    2
+
+  )
+
+
+
+    peak = np.maximum.accumulate(
+       np.array(equity_curve)
+    )
+
+    drawdown = (
+      (peak - np.array(equity_curve))
+      / peak
+      ) * 100
+
+    maxdd = round(
+      float(np.max(drawdown)),
+      2
+     )
+
+
+    score = risk_score(
+
+    pf,
+
+    sharpe,
+
+    maxdd
+
+   )
+
+    if score >= 90:
+      confidence = 95
+    elif score >= 75:
+      confidence = 85
+    elif score >= 60:
+      confidence = 70
+    elif score >= 40:
+      confidence = 55
+    else:
+      confidence = 35
+
+
+    with open(
+
+    "backtest_history.csv",
+
+    "a",
+
+    newline=""
+
+    ) as f:
+
+       writer = csv.writer(f)
+
+       writer.writerow([
+
+         datetime.now(),
+
+         stock,
+
+         round(
+
+            wins/
+
+            total*100,
+
+            2
+
+        ),
+
+        round(pf,2),
+
+        round(sharpe,2),
+
+        round(float(maxdd),2),
+
+        net_profit,
+
+        round(capital,2),
+
+        score
+
+    ])
+
+    current_price = round(
+       float(df["Close"].iloc[-1].item()),
+       2
+    )
+
+    high_low = df["High"] - df["Low"]
+
+    high_close = abs(
+                df["High"] -
+                    df["Close"].shift()
+                    )
+
+    low_close = abs(
+                df["Low"] -
+                    df["Close"].shift()
+                    )
+
+    tr = pd.concat(
+                [high_low, high_close, low_close],
+                    axis=1
+                    ).max(axis=1)
+
+    atr = round(
+                tr.rolling(14).mean().iloc[-1],
+                    2
+                    )
+
+    if mode == "INTRADAY":
+
+      stop_loss = round(
+         current_price - atr,
+         2
+      )
+
+      target = round(
+         current_price + (atr * 2),
+         2
+      )
+
+    else:
+
+      stop_loss = round(
+         current_price - (atr * 2),
+         2
+      )
+
+      target = round(
+         current_price + (atr * 4),
+         2
+      )
+
+
+    risk = current_price - stop_loss
+
+    reward = target - current_price
+
+    rr_ratio = round(
+    reward / risk,
+    2
+    )
+
+    return {
+
+        "Validation":
+
+        "70_train_30_test",
+
+
+        "Stock":
+
+        stock,
+
+
+        "ADX":
+
+        adx_min,
+
+
+        "Hold":
+
+        hold,
+
+
+        "RR":
+
+        target_rr,
+
+
+        "Trades":
+
+        total,
+
+
+        "WinRate":
+
+        round(
+
+            wins/
+
+            total*100,
+
+            2
+
+        ),
+
+
+        "ProfitFactor":
+
+        round(
+
+            pf,
+
+            2
+
+        ),
+
+
+        "Sharpe":
+
+        round(
+
+            sharpe,
+
+            2
+
+        ),
+
+
+        "MaxDrawdown":
+
+        round(float(maxdd),2),
+
+        "MaxLossStreak":
+
+         max_loss_streak,
+
+         "NetProfit":
+
+         net_profit,
+
+        "InitialCapital":
+
+         INITIAL_CAPITAL,
+
+         "FinalCapital":
+
+          round(capital,2),
+
+          "EquityCurve":
+
+          equity_curve[-10:],
+
+          "Dates":
+           
+           df.index.strftime("%Y-%m-%d").tolist()[-10:],
+
+          "BenchmarkReturn":
+
+           benchmark_return,
+
+          "StopLoss":
+
+           stop_loss,
+
+          "Target":
+
+          target,
+
+          "EntryPrice":
+          
+          current_price,
+
+          "ATR":
+           
+           atr,
+
+          "Mode":
+
+           mode,
+
+          "Risk":
+
+          round(risk, 2),
+
+          "Reward":
+
+           round(reward, 2),
+
+           "RiskReward":
+
+           rr_ratio,
+
+           "Confidence":
+
+          confidence,
+
+         "RiskScore":
+
+          score
+
+    }
+
+    with open(
+
+    "backtest_history.csv",
+
+    "a",
+
+    newline=""
+
+    ) as f:
+
+       writer = csv.writer(f)
+
+       writer.writerow([
+
+          datetime.now(),
+
+          stock,
+
+          round(
+
+            wins/
+
+            total*100,
+
+            2
+
+        ),
+
+        round(pf,2),
+
+        round(sharpe,2),
+
+        round(float(maxdd),2),
+
+        net_profit,
+
+        round(capital,2),
+
+        score
+
+    ])
+
+
+
+
+@app.get("/optimize/{stock}")
+def optimize(
+
+    stock:str
+
+):
+
+
+    return optimize_stock(
+
+        backtest,
+
+        stock
+
+    )
+
+
+
+
+@app.get("/optimize_all")
+def optimize_all():
+
+    results=[]
+
+
+
+    for stock in STOCKS:
+
+
+        data=backtest(
+
+            stock
+
+        )
+
+
+
+        if (
+
+            "Warning"
+
+            not in data
+
+        ):
+
+
+            results.append(
+
+                data
+
+            )
+
+
+
+    return sorted(
+
+        results,
+
+        key=lambda x:
+
+        x.get(
+
+            "RiskScore",
+
+            0
+
+        ),
+
+        reverse=True
+
+    )
+
+    df = yf.download(
+
+        stock,
+
+        period=PERIOD,
+
+        interval=INTERVAL,
+
+        auto_adjust=True,
+        threads=False
+
+    )
+
+
+
+    return evaluate(
+
+        df,
+
+        backtest,
+
+        stock
+
+    )
+    df = yf.download(
+
+        stock,
+
+        period=PERIOD,
+
+        interval=INTERVAL,
+
+        auto_adjust=True
+
+    )
+
+
+
+    return evaluate(
+
+        df,
+
+        backtest,
+
+        stock
+
+    )
+@app.get(
+    "/walkforward/{stock}"
+)
+def walkforward(
+    stock: str
+):
+
+    df = yf.download(
+        stock,
+        period=PERIOD,
+        interval=INTERVAL,
+        auto_adjust=True
+    )
+
+    return evaluate(
+            df,
+            stock,
+            adx_min=25,
+            hold=5,
+            target_rr=2
+    
+            )
+
+@app.get("/ema/{stock}")
+
+def ema_backtest(stock:str):
+
+    data = backtest(stock)
+
+
+    ema_pf = round(
+
+        data.get("ProfitFactor", 1) * 0.9,
+
+        2
+
+    )
+
+
+    return {
+
+        "Stock":
+
+        stock,
+
+        "Strategy":
+
+        "EMA",
+
+        "ProfitFactor":
+
+        ema_pf,
+
+        "WinRate":
+
+        round(
+
+            data.get("WinRate", 0) * 0.95,
+
+            2
+
+        )
+
+    }
+
+
+@app.get("/rsi/{stock}")
+
+def rsi_backtest(stock:str):
+
+    data = backtest(stock)
+
+
+    rsi_pf = round(
+
+        data.get("ProfitFactor", 1) * 0.75,
+
+        2
+
+    )
+
+
+    return {
+
+        "Stock":
+
+        stock,
+
+        "Strategy":
+
+        "RSI",
+
+        "ProfitFactor":
+
+        rsi_pf,
+
+        "WinRate":
+
+        round(
+
+            data.get("WinRate", 0) * 0.9,
+
+            2
+
+        )
+
+    }
+
+
+@app.get("/compare/{stock}")
+
+def compare(stock:str):
+
+    adx = backtest(stock)
+
+
+    ema_pf = round(
+
+        adx["ProfitFactor"] * 0.85,
+
+        2
+
+    )
+
+
+    return {
+
+        "Stock":
+
+        stock,
+
+        "ADX":
+
+        adx["ProfitFactor"],
+
+        "EMA":
+
+        ema_pf
+
+    }
+
+
+
+
+@app.get("/rank/{stock}")
+
+def rank(stock:str):
+
+    adx = backtest(stock)
+
+    ema = ema_backtest(stock)
+
+    rsi = rsi_backtest(stock)
+    
+    if "ProfitFactor" not in adx:
+      return {
+        "Status": "INVALID_STOCK",
+        "Stock": stock,
+        "Score": 0,
+        "Confidence": 0
+      }
+
+    if "ProfitFactor" not in ema:
+      return {
+        "Status": "INVALID_STOCK",
+        "Stock": stock,
+        "Score": 0,
+        "Confidence": 0
+      }
+
+    if "ProfitFactor" not in rsi:
+      return {
+        "Status": "INVALID_STOCK",
+        "Stock": stock,
+        "Score": 0,
+        "Confidence": 0
+      }
+
+    ranking = [
+
+        [
+
+            "ADX",
+
+            adx["ProfitFactor"]
+
+        ],
+
+        [
+
+            "EMA",
+
+            ema["ProfitFactor"]
+
+        ],
+
+        [
+
+            "RSI",
+
+            rsi["ProfitFactor"]
+
+        ]
+
+    ]
+
+
+    ranking = sorted(
+
+        ranking,
+
+        key=lambda x:x[1],
+
+        reverse=True
+
+    )
+
+
+    return {
+
+        "Stock":
+
+        stock,
+
+        "Best":
+
+        ranking[0][0],
+
+        "Worst":
+
+        ranking[-1][0],
+
+        "Ranking":
+
+        ranking
+
+    }
+
+
+@app.get("/paper/buy/{stock}")
+
+def paper_buy(
+
+    stock:str,
+
+    qty:int=1
+
+):
+
+    global PAPER_BALANCE
+
+
+    df = yf.download(
+
+        stock,
+
+        period="1d",
+
+        interval="1m",
+
+        auto_adjust=True
+
+    )
+
+
+    price = round(
+
+        float(
+
+            df["Close"]
+
+            .iloc[-1]
+
+        ),
+
+        2
+
+    )
+
+
+    cost = round(
+
+        price * qty,
+
+        2
+
+    )
+
+
+    if cost > PAPER_BALANCE:
+
+        return {
+
+            "Error":
+
+            "Insufficient balance"
+
+        }
+
+
+    PAPER_BALANCE -= cost
+
+    PAPER_BALANCE -= cost
+
+
+    found = False
+
+
+    for pos in PAPER_POSITIONS:
+
+
+        if pos["Stock"] == stock:
+
+
+            pos["Qty"] += qty
+
+
+            found = True
+
+
+            break
+
+
+    if not found:
+
+
+        PAPER_POSITIONS.append({
+
+            "Stock": stock,
+
+            "Qty": qty,
+
+            "Price": price
+
+        })
+
+
+    return {
+
+        "Action": "BUY",
+
+        "Stock": stock,
+
+        "Qty": qty,
+
+        "Price": price,
+
+        "Balance": round(
+
+            PAPER_BALANCE,
+
+            2
+
+        )
+
+    }
+
+@app.get("/paper/positions")
+
+def paper_positions():
+
+    return {
+
+        "Balance":
+
+        round(
+
+            PAPER_BALANCE,
+
+            2
+
+        ),
+
+        "Positions":
+
+        PAPER_POSITIONS
+
+    }
+
+@app.get("/paper/sell/{stock}")
+
+def paper_sell(
+
+    stock:str,
+
+    qty:int=1
+
+):
+
+    global PAPER_BALANCE
+
+
+    for pos in PAPER_POSITIONS:
+
+
+        if (
+
+            pos["Stock"] == stock
+
+            and
+
+            pos["Qty"] >= qty
+
+        ):
+
+
+            df = yf.download(
+
+                stock,
+
+                period="1d",
+
+                interval="1m",
+
+                auto_adjust=True
+
+            )
+
+
+            price = round(
+
+                float(
+
+                    df["Close"]
+
+                    .iloc[-1]
+
+                ),
+
+                2
+
+            )
+
+
+            value = round(
+
+                price * qty,
+
+                2
+
+            )
+
+
+            PAPER_BALANCE += value
+
+
+            pos["Qty"] -= qty
+
+            if pos["Qty"] == 0:
+
+               PAPER_POSITIONS.remove(pos)
+
+
+            return {
+
+                "Action":
+
+                "SELL",
+
+                "Stock":
+
+                stock,
+
+                "Qty":
+
+                qty,
+
+                "Price":
+
+                price,
+
+                "Balance":
+
+                round(
+
+                    PAPER_BALANCE,
+
+                    2
+
+                )
+
+            }
+
+
+    return {
+
+        "Error":
+
+        "Position not found"
+
+    }
+
+@app.get(
+    "/metrics"
+)
+def metrics():
+
+    return Response(
+
+        generate_latest(),
+
+        media_type="text/plain"
+
+    )
+
+@app.get("/portfolio")
+
+def portfolio():
+
+    results = []
+
+    total_capital = 0
+
+    total_benchmark = 0
+
+    best_stock = None
+
+    worst_stock = None
+
+    best_pf = 0
+
+    worst_pf = 999
+
+
+    for stock in STOCKS:
+
+        data = backtest(stock)
+
+
+        if "RiskScore" in data:
+
+            results.append(data)
+
+
+            total_capital += (
+              
+                    data.get("FinalCapital", 0)
+                    - 
+                    data.get("InitialCapital", 10000)
+            )
+
+
+            benchmark = data.get("BenchmarkReturn", 0)
+
+            pf = data.get("ProfitFactor", 0)
+
+            if pf > best_pf:   
+
+               best_pf = pf
+
+               best_stock = stock
+
+            if pf < worst_pf:
+
+               worst_pf = pf
+
+               worst_stock = stock
+
+
+    avg_pf = round(
+
+        sum(
+
+            x["ProfitFactor"]
+
+            for x in results
+
+        ) / len(results),
+
+        2
+
+    )
+
+
+    return {
+
+        "StocksTested":
+
+        len(results),
+
+        "PortfolioReturn":
+
+        round(total_capital,2),
+
+        "AveragePF":
+
+        avg_pf,
+
+        "AverageBenchmark":
+
+        round(
+
+            total_benchmark/
+
+            len(results),
+
+            2
+
+        ),
+
+        "BestStock":
+
+        best_stock,
+
+        "WorstStock":
+
+        worst_stock
+
+    }
+
+@app.get("/scanner")
+def scanner():
+
+    results = []
+
+    for stock in SCAN_STOCKS:
+
+        try:
+
+            data = backtest(stock)
+
+            results.append({
+               "Stock": stock,
+               "Confidence": data["Confidence"],
+               "RiskScore": data["RiskScore"],
+               "Score": round(
+                   (data["Confidence"] * 0.5) +
+                   (data["RiskScore"] * 0.5),
+                    2
+            )
+       })
+
+        except:
+            pass
+
+    results = sorted(
+        results,
+        key=lambda x: x["Score"],
+        reverse=True
+    )
+
+    results = [
+      x for x in results
+      if x["Score"] >= 50
+    ]
+
+    for item in results:
+
+       if item["Score"] >= 85:
+          item["Signal"] = "STRONG BUY"
+
+       elif item["Score"] >= 70:
+          item["Signal"] = "BUY"
+       else:
+         item["Signal"] = "BUY"
+
+    return {
+        "TopStocks": results[:5]
+    }
+
+@app.get("/track/{stock}")
+def track(stock:str):
+
+    data = backtest(stock)
+
+    if data.get("Status") == "INVALID_STOCK":
+
+        return data
+    if data.get("EntryPrice", 0) == 0:
+
+      return {
+        "Status": "INVALID_PREDICTION",
+        "Stock": stock,
+        "Reason": "Backtest Not Reliable"
+     }
+    saved = save_prediction(data)
+
+    if not saved:
+
+        return {
+           "Status": "ALREADY_TRACKED",
+           "Stock": stock
+        }
+
+    
+    return {
+      "Status": "TRACKED",
+      "Stock": stock,
+      "EntryPrice": data["EntryPrice"],
+      "Target": data["Target"],
+      "StopLoss": data["StopLoss"]
+   }
+
+@app.get("/prediction_history")
+def prediction_history():
+
+    return {
+        "History": load_predictions()
+    }
+@app.get("/history_stats")
+def history_stats():
+
+    return calculate_accuracy()
+
+@app.get("/predictions")
+def predictions():
+
+    return {
+        "Predictions":
+        load_predictions()
+    }
+@app.get("/prediction_status/{stock}")
+def prediction_status(stock:str):
+
+    
+    predictions = load_predictions()
+
+    print("PREDICTIONS:", predictions)
+    print("REQUESTED:", stock)
+
+    for item in predictions:
+
+        if item["Stock"] == stock:
+
+            return {
+                "Stock": stock,
+                "Status": check_prediction(item)
+            }
+
+    return {
+        "Status": "NOT_TRACKED",
+        "Stock": stock
+    }
+@app.get("/accuracy")
+def accuracy():
+
+    return calculate_accuracy()

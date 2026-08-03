@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+
+
+scrape_configs:
+
+  - job_name: "backtest"
+
+    static_configs:
+
+      - targets:
+
+          - 172.31.1.248:8008

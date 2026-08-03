@@ -1,0 +1,41 @@
+[
+    {
+        "Stock": "INFY.NS",
+        "EntryPrice": 1071.1,
+        "Target": 1085.18,
+        "StopLoss": 1064.06,
+        "Mode": "INTRADAY",
+        "Confidence": 70,
+        "Status": "OPEN",
+        "TrackedAt": "2026-07-07T05:49:46.121229+00:00",
+        "LastChecked": "2026-07-07T05:49:54.379238+00:00",
+        "ResolvedAt": null,
+        "ExpiryDays": 5
+    },
+    {
+        "Stock": "TCS.NS",
+        "EntryPrice": 2099.8,
+        "Target": 2078.04,
+        "StopLoss": 2110.68,
+        "Mode": "INTRADAY",
+        "Confidence": 55,
+        "Status": "WIN",
+        "TrackedAt": "2026-07-07T05:49:46.994608+00:00",
+        "LastChecked": "2026-07-07T05:49:54.434623+00:00",
+        "ResolvedAt": "2026-07-07T05:49:54.434623+00:00",
+        "ExpiryDays": 5
+    },
+    {
+        "Stock": "COALINDIA.NS",
+        "EntryPrice": 425.45,
+        "Target": 428.69,
+        "StopLoss": 423.83,
+        "Mode": "INTRADAY",
+        "Confidence": 70,
+        "Status": "OPEN",
+        "TrackedAt": "2026-07-07T05:49:47.850637+00:00",
+        "LastChecked": "2026-07-07T05:49:54.488551+00:00",
+        "ResolvedAt": null,
+        "ExpiryDays": 5
+    }
+]
