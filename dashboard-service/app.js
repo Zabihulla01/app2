@@ -184,21 +184,45 @@ function goToStage(n) {
 // API fetch wrapper — shows errors as toasts, returns null on failure
 // ─────────────────────────────────────────────────────────────────────────────
 async function apiFetch(path, options = {}) {
-    try {
-        const res = await fetch(API + path, options);
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-            const msg = data?.detail || data?.error || `HTTP ${res.status}`;
-            showToast(`❌ API error: ${msg}`, "error");
-            console.error("API error", path, res.status, data);
+    // A short-lived gateway restart or a slow market-data request should not
+    // surface as a misleading permanent "Failed to fetch" error.  Retry safe
+    // GETs, while keeping POST/DELETE requests single-shot.
+    const method = (options.method || "GET").toUpperCase();
+    const attempts = method === "GET" ? 3 : 1;
+    const timeoutMs = options.timeoutMs || 150_000;
+    const fetchOptions = { ...options };
+    delete fetchOptions.timeoutMs;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const res = await fetch(API + path, { ...fetchOptions, signal: controller.signal });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                const msg = data?.detail || data?.error || `HTTP ${res.status}`;
+                showToast(`❌ API error: ${msg}`, "error");
+                console.error("API error", path, res.status, data);
+                return null;
+            }
+            return data;
+        } catch (err) {
+            const retryable = method === "GET" && attempt < attempts;
+            if (retryable) {
+                await new Promise(resolve => setTimeout(resolve, 750 * attempt));
+                continue;
+            }
+            const message = err.name === "AbortError"
+                ? "The service took too long to respond"
+                : err.message;
+            showToast(`❌ Network error: ${message}`, "error");
+            console.error("Network error", path, err);
             return null;
+        } finally {
+            clearTimeout(timer);
         }
-        return data;
-    } catch (err) {
-        showToast(`❌ Network error: ${err.message}`, "error");
-        console.error("Network error", path, err);
-        return null;
     }
+    return null;
 }
 
 // =============================================================================
@@ -903,6 +927,7 @@ function populateStage4(data) {
 function toggleAutoRefresh() {
     const on = document.getElementById("s4-auto-toggle")?.checked;
     if (on) {
+        clearInterval(s4AutoTimer);
         s4AutoTimer = setInterval(refreshProtection, 60_000);
         showToast("Auto-refresh ON — every 60 s", "info");
     } else {
