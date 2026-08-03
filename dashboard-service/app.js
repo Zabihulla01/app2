@@ -6,7 +6,12 @@
 // This avoids hardcoded IPs and works from any browser.
 // =============================================================================
 
-const API = "/api";   // nginx proxy → backtest service on :8008
+// Use nginx's same-origin proxy in Docker.  When index.html is opened directly
+// from disk, /api resolves to file:///api and the Analyze button cannot reach
+// the service, so connect to the published backtest port instead.
+const API = window.location.protocol === "file:"
+    ? "http://localhost:8008"
+    : "/api";
 
 // ── Global state ─────────────────────────────────────────────────────────────
 let currentSymbol  = "";
@@ -608,6 +613,10 @@ async function loadStage1(symbol, mode) {
         currentSymbol = symbol;
         _goToStageForce(1);
         showToast(`✅ Analysis complete: ${symbol}`, "success");
+    } catch (err) {
+        console.error(`[API] Analysis failed for ${symbol}`, err);
+        showSearchError(`❌ Could not analyze ${symbol}. Make sure the backtest service is running.`);
+        showToast("❌ Analysis failed. Check that the API service is running.", "error");
 
     } finally {
         if (btnText)    btnText.style.display    = "";
