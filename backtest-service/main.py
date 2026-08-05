@@ -68,6 +68,7 @@ from walkforward import walkforward_split
 # ── Two-Stage Analysis Architecture ──────────────────────────────────────────
 from stage1_analysis import run_stage1_analysis
 from stage2_decision import make_trading_decision, get_decision_summary
+from analysis_cache import save_analysis_cache, get_analysis_cache
 
 from indicators import add_indicators
 from market_filter import market_trend
@@ -2361,6 +2362,8 @@ def stage1_analyze(stock: str, mode: str = "INTRADAY"):
         backtest_metrics=bt_metrics,
         multi_tf_dfs=multi_tf_dfs,
     )
+    # Stage 2 must consume the exact Stage 1 analysis that the UI just saw.
+    save_analysis_cache(sym, cache)
 
     # ── 5. Build flat response for the UI ─────────────────────────────────
     pa   = cache.get("price_action", {})
@@ -2536,12 +2539,33 @@ def stage2_recommend(stock: str, mode: str = "INTRADAY"):
 
     sym = _normalize_symbol(stock)
 
-    try:
-        bt = backtest(sym, mode=mode)
-    except Exception as e:
-        _log("ERROR", event="stage2_backtest_error", stock=sym, error=str(e))
-        return {"Stage": 2, "Symbol": sym, "Decision": "NO TRADE",
-                "Reason": f"Data error: {e}", "Confidence": 0}
+    # Reuse the latest Stage 1 cache. If the user opens Stage 2 directly,
+    # create that cache through the Binance-backed Stage 1 endpoint first.
+    if not get_analysis_cache(sym):
+        stage1_analyze(sym, mode=mode)
+
+    decision = make_trading_decision(sym, mode=mode)
+    if decision.get("Decision") in ("LONG", "SHORT"):
+        return {"Stage": 2, "Direction": decision["Decision"], **decision}
+    return {
+        "Stage": 2,
+        "Symbol": sym,
+        "Mode": mode,
+        "Decision": decision.get("Decision", "NO TRADE"),
+        "Direction": "NEUTRAL",
+        "Confidence": decision.get("Confidence", 0),
+        "DecisionConfidence": decision.get("DecisionConfidence", 0),
+        "RiskScore": decision.get("RiskScore", 0),
+        "Entry": 0,
+        "StopLoss": 0,
+        "TP1": 0,
+        "TP2": 0,
+        "TP3": 0,
+        "Risk": 0,
+        "Reward": 0,
+        "RiskReward": 0,
+        "Reason": decision.get("Reason", "No valid setup"),
+    }
 
     if bt.get("Status") == "INVALID_STOCK" or bt.get("error"):
         return {"Stage": 2, "Symbol": sym, "Decision": "NO TRADE",

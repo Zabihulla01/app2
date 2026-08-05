@@ -247,12 +247,14 @@ def evaluate_decision(
     min_win_rate = 50
     
     # Check LONG
-    if long_score >= 70 and confidence_score >= min_confidence and risk_score >= min_risk_score:
+    # RiskScore is a danger score: lower is safer. A setup must stay at or
+    # below the maximum acceptable risk threshold.
+    if long_score >= 70 and confidence_score >= min_confidence and risk_score <= min_risk_score:
         decision = "LONG"
         decision_confidence = min(long_score, 95)
     
     # Check SHORT
-    elif short_score >= 70 and confidence_score >= min_confidence and risk_score >= min_risk_score:
+    elif short_score >= 70 and confidence_score >= min_confidence and risk_score <= min_risk_score:
         decision = "SHORT"
         decision_confidence = min(short_score, 95)
         reasons = short_reasons
