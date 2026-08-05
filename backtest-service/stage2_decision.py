@@ -40,32 +40,34 @@ def make_trading_decision(symbol: str, mode: str = "INTRADAY") -> Dict[str, Any]
         }
     
     # Extract key metrics from cache
-    trend = cache.get("trend", "NEUTRAL")
-    trend_strength = cache.get("trend_strength", 0)
-    market_health = cache["market_health"]["overall_score"]
-    confidence_score = cache.get("confidence_score", 0)
-    risk_score = cache.get("risk_score", 0)
-    
-    rsi = cache["rsi_analysis"]["rsi"]
-    rsi_signal = cache["rsi_analysis"]["signal"]
-    
-    adx = cache["adx_analysis"]["adx"]
-    adx_strength = cache["adx_analysis"]["trend_strength"]
-    
-    macd_trend = cache["macd_analysis"]["trend"]
-    macd_crossover = cache["macd_analysis"]["crossover"]
-    
-    ema_alignment = cache["ema_analysis"]["alignment"]
-    
-    mtf_alignment = cache["multi_timeframe_confirmation"]["alignment"]
-    
-    structure_break = cache.get("structure_break", False)
-    
-    volatility_regime = cache["volatility_analysis"]["volatility_regime"]
-    
-    # Backtest metrics
-    win_rate = cache["backtest_metrics"]["win_rate"]
-    profit_factor = cache["backtest_metrics"]["profit_factor"]
+    # Current Stage 1 schema stores each analysis group as a nested object.
+    # Keep fallbacks for older cached records during rolling deployments.
+    trend_data = cache.get("trend") if isinstance(cache.get("trend"), dict) else {}
+    trend = trend_data.get("direction", cache.get("trend", "NEUTRAL"))
+    trend_strength = trend_data.get("strength_score", cache.get("trend_strength", 0))
+    market_health = cache.get("market_health", {}).get("overall_score", 0)
+    confidence_score = cache.get("confidence", {}).get("score", cache.get("confidence_score", 0))
+    risk_score = cache.get("risk", {}).get("score", cache.get("risk_score", 0))
+
+    momentum = cache.get("momentum", {})
+    rsi = momentum.get("rsi", cache.get("rsi_analysis", {}).get("rsi", 50))
+    rsi_zone = momentum.get("rsi_zone", "Neutral").upper()
+    rsi_signal = "OVERSOLD" if "OVERSOLD" in rsi_zone else "OVERBOUGHT" if "OVERBOUGHT" in rsi_zone else "NEUTRAL"
+
+    adx_data = cache.get("trend", {})
+    adx = adx_data.get("adx", cache.get("adx_analysis", {}).get("adx", 0))
+    adx_strength = adx_data.get("adx_strength", cache.get("adx_analysis", {}).get("trend_strength", "Weak"))
+
+    macd_trend = momentum.get("macd_trend", cache.get("macd_analysis", {}).get("trend", "Neutral")).upper()
+    macd_crossover = "BULL" in momentum.get("macd_cross", "").upper()
+    ema_alignment = trend_data.get("ema_alignment", cache.get("ema_analysis", {}).get("alignment", "Mixed")).upper()
+    mtf_alignment = cache.get("multi_timeframe", {}).get("alignment_score", 0) >= 70
+    structure_break = cache.get("price_action", {}).get("bos", "None") != "None"
+    volatility_regime = cache.get("volatility", {}).get("regime", "Moderate").upper()
+
+    backtest = cache.get("backtest_metrics", {})
+    win_rate = backtest.get("win_rate", 0)
+    profit_factor = backtest.get("profit_factor", 0)
     
     # Decision logic
     decision_result = evaluate_decision(
@@ -298,7 +300,7 @@ def calculate_trade_setup(cache: Dict[str, Any], decision: str, mode: str) -> Di
         Dict with entry, stops, targets, risk/reward
     """
     current_price = cache["current_price"]
-    atr = cache["atr"]
+    atr = cache.get("volatility", {}).get("atr", cache.get("atr", 0))
     
     # ATR multipliers based on mode
     if mode == "INTRADAY":
@@ -358,11 +360,11 @@ def get_decision_summary(symbol: str) -> Optional[Dict[str, Any]]:
     
     return {
         "Symbol": symbol,
-        "Trend": cache.get("trend", "NEUTRAL"),
-        "Confidence": cache.get("confidence_score", 0),
-        "RiskScore": cache.get("risk_score", 0),
+        "Trend": cache.get("trend", {}).get("direction", "NEUTRAL"),
+        "Confidence": cache.get("confidence", {}).get("score", cache.get("confidence_score", 0)),
+        "RiskScore": cache.get("risk", {}).get("score", cache.get("risk_score", 0)),
         "MarketHealth": cache["market_health"]["overall_score"],
-        "ADX": cache["adx_analysis"]["adx"],
-        "RSI": cache["rsi_analysis"]["rsi"],
-        "Bias": cache["ai_summary"]["bias"]
+        "ADX": cache.get("trend", {}).get("adx", 0),
+        "RSI": cache.get("momentum", {}).get("rsi", 50),
+        "Bias": cache.get("summary", {}).get("bias", "Neutral")
     }
