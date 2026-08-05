@@ -2506,8 +2506,8 @@ def stage1_analyze(stock: str, mode: str = "INTRADAY"):
         "Status":      summ.get("status"),
         "Highlights":  summ.get("highlights"),
 
-        # Legacy fields for Stage 2 compatibility
-        "Signal":          "BUY" if summ.get("bias") == "Bullish" else "SELL" if summ.get("bias") == "Bearish" else "NEUTRAL",
+        # Legacy analysis fields. Stage 1 intentionally exposes no BUY/SELL
+        # signal; trade decisions belong exclusively to Stage 2.
         "TrendStrength":   tr.get("adx_strength"),
         "MarketStructure": pa.get("structure"),
         "EMAAlignment":    tr.get("ema_alignment"),

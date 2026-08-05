@@ -10,7 +10,7 @@ import numpy as np
 # Test imports
 print("Testing imports...")
 try:
-    from analysis_cache import create_analysis_cache, get_analysis_cache
+    from analysis_cache import create_analysis_cache, get_analysis_cache, save_analysis_cache
     print("✓ analysis_cache imported")
 except Exception as e:
     print(f"✗ analysis_cache import failed: {e}")
@@ -43,7 +43,9 @@ print(f"  Timestamp: {cache['timestamp']}")
 
 # Test cache retrieval
 retrieved = get_analysis_cache("TEST-USD")
-print(f"✓ Cache retrieved")
+save_analysis_cache("TEST-USD", cache)
+retrieved = get_analysis_cache("TEST-USD")
+print(f"✓ Cache saved and retrieved")
 print(f"  Cache exists: {retrieved is not None}")
 
 print("\n" + "="*60)
@@ -104,13 +106,14 @@ try:
         timeframe="1h",
         backtest_metrics=backtest_metrics
     )
+    save_analysis_cache("BTC-USD", cache)
     print("✓ Stage 1 analysis completed")
-    print(f"  Trend: {cache.get('trend')}")
-    print(f"  Trend Strength: {cache.get('trend_strength')}")
-    print(f"  Confidence Score: {cache.get('confidence_score')}")
-    print(f"  Risk Score: {cache.get('risk_score')}")
+    print(f"  Trend: {cache['trend']['direction']}")
+    print(f"  Trend Strength: {cache['trend']['strength_score']}")
+    print(f"  Confidence Score: {cache['confidence']['score']}")
+    print(f"  Risk Score: {cache['risk']['score']}")
     print(f"  Market Health: {cache['market_health']['overall_score']}")
-    print(f"  AI Bias: {cache['ai_summary']['bias']}")
+    print(f"  AI Bias: {cache['summary']['bias']}")
 except Exception as e:
     print(f"✗ Stage 1 analysis failed: {e}")
     import traceback
