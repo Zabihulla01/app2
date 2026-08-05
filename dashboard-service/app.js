@@ -793,8 +793,8 @@ function populateStage1(d) {
     set("s1-pa-sh", d.PA_SwingHigh ? `SH: ${fmtPrice(d.PA_SwingHigh)}` : "SH: —", "val-up");
     set("s1-pa-sl", d.PA_SwingLow  ? `SL: ${fmtPrice(d.PA_SwingLow)}`  : "SL: —", "val-down");
 
-    const hhhl = [d.PA_HH?"HH✓":"HH✗", d.PA_HL?"HL✓":"HL✗"].join("  ");
-    const lhll = [d.PA_LH?"LH✓":"LH✗", d.PA_LL?"LL✓":"LL✗"].join("  ");
+    const hhhl = [`HH: ${d.PA_HH?"Yes":"No"}`, `HL: ${d.PA_HL?"Yes":"No"}`].join("  ·  ");
+    const lhll = [`LH: ${d.PA_LH?"Yes":"No"}`, `LL: ${d.PA_LL?"Yes":"No"}`].join("  ·  ");
     set("s1-pa-hh", hhhl, d.PA_HH && d.PA_HL ? "val-up" : "val-neutral");
     set("s1-pa-ll", lhll, d.PA_LH && d.PA_LL ? "val-down" : "val-neutral");
 
@@ -825,8 +825,9 @@ function populateStage1(d) {
     set("s1-trend", d.Trend || "N/A", trendColor(d.Trend));
     set("s1-trend-score", d.TrendScore != null ? `Score: ${fmt(d.TrendScore,0)}/100` : "Score: —");
     set("s1-ema-align", d.EMA_Alignment || "N/A", trendColor(d.EMA_Alignment));
-    const emaAbove = [d.EMA9?"9✓":"9✗", d.EMA21?"21✓":"21✗", d.EMA50?"50✓":"50✗", d.EMA200?"200✓":"200✗"]
-        .filter((_,i)=>[d.EMA9,d.EMA21,d.EMA50,d.EMA200][i]).join(" ");
+    const ema20 = d.EMA20 ?? d.EMA_20;
+    const emaAbove = [ema20?"20✓":"20✗", d.EMA50?"50✓":"50✗", d.EMA200?"200✓":"200✗"]
+        .filter((_,i)=>[ema20,d.EMA50,d.EMA200][i]).join(" ");
     set("s1-ema-align-sub", `Price above: ${emaAbove || "none"}`);
 
     const st = d.Supertrend || "N/A";
@@ -842,8 +843,8 @@ function populateStage1(d) {
     set("s1-ema9-sub",  `Price ${price > d.EMA9?"above ✓":"below ✗"} EMA9`,  price > d.EMA9?"val-up":"val-down");
     set("s1-ema21",  fmtPrice(d.EMA21));
     set("s1-ema21-sub", `Price ${price > d.EMA21?"above ✓":"below ✗"} EMA21`, price > d.EMA21?"val-up":"val-down");
-    set("s1-ema20",  fmtPrice(d.EMA20));
-    set("s1-ema20-sub", `Price ${price > d.EMA20?"above ✓":"below ✗"} EMA20`, price > d.EMA20?"val-up":"val-down");
+    set("s1-ema20",  fmtPrice(ema20));
+    set("s1-ema20-sub", `Price ${price > ema20?"above ✓":"below ✗"} EMA20`, price > ema20?"val-up":"val-down");
     set("s1-ema50",  fmtPrice(d.EMA50));
     set("s1-ema50-sub", `Price ${price > d.EMA50?"above ✓":"below ✗"} EMA50`, price > d.EMA50?"val-up":"val-down");
     set("s1-ema200", fmtPrice(d.EMA200));
