@@ -684,28 +684,9 @@ async function manualSelectSymbol() {
         return;
     }
 
-    // Normalize: if user typed "BTC" or "BITCOIN" without -USD, resolve it
-    const knownCrypto = ASSET_LIST.filter(a => a.cat === "crypto");
-    const hasDash = sym.includes("-");
-
-    if (!hasDash) {
-        // Try to match against symbol without -USD (e.g. "BTC" → "BTC-USD")
-        const match = knownCrypto.find(a =>
-            a.sym.replace("-USD","").toUpperCase() === sym ||
-            a.name.toUpperCase() === sym
-        );
-        if (match) {
-            sym = match.sym;
-        } else {
-            // Append -USD as a best-effort
-            sym += "-USD";
-        }
-    }
-
-    // Validate it looks like a crypto pair
-    if (!sym.endsWith("-USD") && !sym.includes("-")) {
-        showSearchError("⚠️ Please select a crypto asset from the dropdown.");
-        return;
+    // Normalize Binance format: BTCUSDT → BTC-USD, ETHUSDT → ETH-USD
+    if (!sym.includes("-")) {
+        sym = sym.replace(/USDT$/i, "").replace(/USD$/i, "") + "-USD";
     }
 
     if (inp) inp.value = sym;
@@ -785,107 +766,191 @@ async function loadStage1(symbol, mode) {
 function populateStage1(d) {
     set("s1-sym-label", d.Symbol, "val-cyan");
 
-    // ── Row 0: Price ─────────────────────────────────────────────────────
-    set("s1-price",  fmtPrice(d.LivePrice || d.EntryPrice), "val-cyan");
-
+    // ── Price ─────────────────────────────────────────────────────────────
+    const price = parseFloat(d.LivePrice || d.EntryPrice) || 0;
+    set("s1-price", fmtPrice(price), "val-cyan");
     if (d.Change24h != null) {
         const c = parseFloat(d.Change24h);
         set("s1-change", `24h: ${c>=0?"▲":"▼"} ${Math.abs(c).toFixed(2)}%`, c>=0?"val-up":"val-down");
     } else {
         set("s1-change", "24h: N/A");
     }
+    set("s1-vol", fmtBig(d.Volume24h));
+    if (d.High24h && d.Low24h)
+        set("s1-mcap", `H: ${fmtPrice(d.High24h)}  L: ${fmtPrice(d.Low24h)}`);
 
-    set("s1-vol",  fmtBig(d.Volume24h));
-    set("s1-mcap", `MCap: ${fmtBig(d.MarketCap)}`);
-
-    set("s1-health",   d.MarketHealth  || "N/A", trendColor(d.MarketHealth));
+    set("s1-health", d.MarketHealth || "N/A", trendColor(d.MarketHealth));
+    const bull = d.BullScore != null ? fmt(d.BullScore,0) : "—";
+    const bear = d.BearScore != null ? fmt(d.BearScore,0) : "—";
+    set("s1-health-scores", `Bull ${bull}  Bear ${bear}`);
     set("s1-mode-lbl", `Mode: ${d.Mode || "N/A"}`);
+    set("s1-status", d.Status || "N/A",
+        (d.Status||"").includes("Ready") ? "val-up" : "val-neutral");
 
-    // ── Row 1: Trend ──────────────────────────────────────────────────────
-    set("s1-trend",    d.Trend         || "N/A", trendColor(d.Trend));
-    set("s1-tstr",     d.TrendStrength || "N/A", trendColor(d.TrendStrength));
-    set("s1-tstr-sub", d.WinRate != null ? `Win Rate ${fmt(d.WinRate,1)}%` : "");
-    set("s1-struct",   d.MarketStructure || "N/A", trendColor(d.Trend));
-    set("s1-bos",      d.Signal || "N/A", signalColor(d.Signal));
+    // ── Price Action ──────────────────────────────────────────────────────
+    set("s1-pa-struct", d.PA_Structure || "N/A", trendColor(d.PA_Bias));
+    set("s1-pa-bias",   d.PA_Bias      || "N/A", trendColor(d.PA_Bias));
+    set("s1-pa-sh", d.PA_SwingHigh ? `SH: ${fmtPrice(d.PA_SwingHigh)}` : "SH: —", "val-up");
+    set("s1-pa-sl", d.PA_SwingLow  ? `SL: ${fmtPrice(d.PA_SwingLow)}`  : "SL: —", "val-down");
 
-    // ── Row 2: EMAs ───────────────────────────────────────────────────────
-    const price = parseFloat(d.LivePrice || d.EntryPrice) || 0;
+    const hhhl = [d.PA_HH?"HH✓":"HH✗", d.PA_HL?"HL✓":"HL✗"].join("  ");
+    const lhll = [d.PA_LH?"LH✓":"LH✗", d.PA_LL?"LL✓":"LL✗"].join("  ");
+    set("s1-pa-hh", hhhl, d.PA_HH && d.PA_HL ? "val-up" : "val-neutral");
+    set("s1-pa-ll", lhll, d.PA_LH && d.PA_LL ? "val-down" : "val-neutral");
 
-    set("s1-ema20",  fmtPrice(d.EMA20));
-    set("s1-ema20-sub",  d.EMA20 && price ? `Price ${price > d.EMA20 ? "above ✓" : "below ✗"} EMA 20` : "Short-term trend",  price > d.EMA20 ? "val-up" : "val-down");
+    const bosVal = d.PA_BOS || "None";
+    set("s1-bos", bosVal, bosVal.includes("Bull") ? "val-up" : bosVal === "None" ? "val-neutral" : "val-down");
+    const chochVal = d.PA_CHoCH || "None";
+    set("s1-choch", `CHoCH: ${chochVal}`, chochVal.includes("Bull") ? "val-up" : chochVal === "None" ? "val-neutral" : "val-down");
 
+    // ── SMC ───────────────────────────────────────────────────────────────
+    const obBull = d.SMC_OB_Bull ? `Bull OB: ${fmtPrice(d.SMC_OB_Bull)}` : "No Bull OB";
+    const obBear = d.SMC_OB_Bear ? `Bear OB: ${fmtPrice(d.SMC_OB_Bear)}` : "No Bear OB";
+    set("s1-smc-ob",     obBull, d.SMC_OB_Bull ? "val-up" : "val-neutral");
+    set("s1-smc-ob-sub", obBear, d.SMC_OB_Bear ? "val-down" : "val-neutral");
+
+    const fvgBull = d.SMC_FVG_Bull ? `Bull FVG: ${fmtPrice(d.SMC_FVG_Bull)}` : "No Bull FVG";
+    const fvgBear = d.SMC_FVG_Bear ? `Bear FVG: ${fmtPrice(d.SMC_FVG_Bear)}` : "No Bear FVG";
+    set("s1-smc-fvg",     fvgBull, d.SMC_FVG_Bull ? "val-up" : "val-neutral");
+    set("s1-smc-fvg-sub", fvgBear, d.SMC_FVG_Bear ? "val-down" : "val-neutral");
+
+    const sweep = d.SMC_Sweep || "None";
+    set("s1-smc-liq", sweep, sweep.includes("Bull") ? "val-up" : sweep === "None" ? "val-neutral" : "val-down");
+    const breaker = d.SMC_Breaker || "None";
+    set("s1-smc-liq-sub", `Breaker: ${breaker}`, breaker.includes("Bull") ? "val-up" : "val-neutral");
+
+    // ── Trend ─────────────────────────────────────────────────────────────
+    set("s1-trend", d.Trend || "N/A", trendColor(d.Trend));
+    set("s1-trend-score", d.TrendScore != null ? `Score: ${fmt(d.TrendScore,0)}/100` : "Score: —");
+    set("s1-ema-align", d.EMA_Alignment || "N/A", trendColor(d.EMA_Alignment));
+    const emaAbove = [d.EMA9?"9✓":"9✗", d.EMA21?"21✓":"21✗", d.EMA50?"50✓":"50✗", d.EMA200?"200✓":"200✗"]
+        .filter((_,i)=>[d.EMA9,d.EMA21,d.EMA50,d.EMA200][i]).join(" ");
+    set("s1-ema-align-sub", `Price above: ${emaAbove || "none"}`);
+
+    const st = d.Supertrend || "N/A";
+    set("s1-supertrend", st, st === "Bullish" ? "val-up" : st === "Bearish" ? "val-down" : "val-neutral");
+    set("s1-supertrend-val", d.Supertrend_val ? `Level: ${fmtPrice(d.Supertrend_val)}` : "");
+
+    const adxV = d.ADX != null ? fmt(d.ADX,1) : "—";
+    set("s1-adx", `${adxV} (${d.ADX_Strength||"—"})`, d.ADX>=25?"val-up":"val-neutral");
+    set("s1-di", `+DI ${d.PlusDI!=null?fmt(d.PlusDI,1):"—"}  -DI ${d.MinusDI!=null?fmt(d.MinusDI,1):"—"}  (${d.DI_Bias||"—"})`);
+
+    // EMAs
+    set("s1-ema9",   fmtPrice(d.EMA9));
+    set("s1-ema9-sub",  `Price ${price > d.EMA9?"above ✓":"below ✗"} EMA9`,  price > d.EMA9?"val-up":"val-down");
+    set("s1-ema21",  fmtPrice(d.EMA21));
+    set("s1-ema21-sub", `Price ${price > d.EMA21?"above ✓":"below ✗"} EMA21`, price > d.EMA21?"val-up":"val-down");
     set("s1-ema50",  fmtPrice(d.EMA50));
-    set("s1-ema50-sub",  d.EMA50 && price ? `Price ${price > d.EMA50 ? "above ✓" : "below ✗"} EMA 50` : "Mid-term trend",  price > d.EMA50 ? "val-up" : "val-down");
-
+    set("s1-ema50-sub", `Price ${price > d.EMA50?"above ✓":"below ✗"} EMA50`, price > d.EMA50?"val-up":"val-down");
     set("s1-ema200", fmtPrice(d.EMA200));
-    set("s1-ema200-sub", d.EMA200 && price ? `Price ${price > d.EMA200 ? "above ✓" : "below ✗"} EMA 200` : "Long-term trend", price > d.EMA200 ? "val-up" : "val-down");
+    set("s1-ema200-sub", `Price ${price > d.EMA200?"above ✓":"below ✗"} EMA200`, price > d.EMA200?"val-up":"val-down");
 
-    set("s1-ema-align", d.EMAAlignment || "N/A", trendColor(d.EMAAlignment));
-
-    // ── Row 3: Momentum ───────────────────────────────────────────────────
+    // ── Momentum ──────────────────────────────────────────────────────────
     const rsiV = parseFloat(d.RSI);
-    set("s1-rsi",      isNaN(rsiV) ? "N/A" : fmt(rsiV, 1),
-        rsiV >= 70 ? "val-down" : rsiV <= 30 ? "val-up" : "val-neutral");
-    set("s1-rsi-zone", d.RSIZone || "N/A",
-        (d.RSIZone || "").includes("Over") ? (d.RSIZone.includes("bought") ? "val-down" : "val-up") : "val-neutral");
+    set("s1-rsi", isNaN(rsiV) ? "N/A" : fmt(rsiV,1),
+        rsiV>=70?"val-down":rsiV<=30?"val-up":"val-neutral");
+    set("s1-rsi-zone", d.RSI_Zone || "N/A");
 
-    set("s1-macd",     d.MACD    || "N/A", trendColor(d.MACD));
-    set("s1-macd-sub", `PF ${fmt(d.ProfitFactor, 2)}  |  ADX ${fmt(d.ADX, 1)}`);
+    set("s1-macd", d.MACD_Trend || "N/A", trendColor(d.MACD_Trend));
+    set("s1-macd-cross", d.MACD_Cross || "None",
+        (d.MACD_Cross||"").includes("Bull")?"val-up":(d.MACD_Cross||"").includes("Bear")?"val-down":"val-neutral");
 
-    set("s1-bb",     d.BBPosition || "N/A");
-    set("s1-bb-sub", `Sharpe ${fmt(d.Sharpe, 2)}`);
+    const srsiV = d.StochRSI_K != null ? fmt(d.StochRSI_K,1) : "—";
+    set("s1-srsi", srsiV,
+        d.StochRSI_K>=80?"val-down":d.StochRSI_K<=20?"val-up":"val-neutral");
+    set("s1-srsi-zone", `${d.StochRSI_Zone||"N/A"}  Cross: ${d.StochRSI_Cross||"—"}`);
 
-    set("s1-mtf",     d.MultiTFLabel || "N/A");
-    set("s1-mtf-sub", d.MultiTFStrength != null ? `Strength: ${d.MultiTFStrength}%` : "");
+    const cciV = d.CCI != null ? fmt(d.CCI,1) : "—";
+    set("s1-cci", cciV,
+        d.CCI>=100?"val-down":d.CCI<=-100?"val-up":"val-neutral");
+    set("s1-cci-signal", d.CCI_Signal || "N/A");
 
-    // ── Row 4: Volatility ─────────────────────────────────────────────────
-    set("s1-atr",      fmtPrice(d.ATR), "val-cyan");
-    set("s1-vol2",     d.Volatility  || "N/A",
-        d.Volatility === "Low" ? "val-up" : d.Volatility === "Extreme" || d.Volatility === "High" ? "val-down" : "val-neutral");
-    set("s1-vol2-sub", d.VolatilityPct != null ? `ATR = ${fmt(d.VolatilityPct,2)}% of price` : "");
+    set("s1-mom-score", d.MomScore != null ? `${fmt(d.MomScore,0)}/100` : "—",
+        d.MomScore>=65?"val-up":d.MomScore<=35?"val-down":"val-neutral");
+    set("s1-mom-label", d.MomLabel || "N/A", trendColor(d.MomLabel));
 
-    set("s1-support",  fmtPrice(d.Support),    "val-up");
-    set("s1-resist",   fmtPrice(d.Resistance), "val-down");
+    // ── Volatility ────────────────────────────────────────────────────────
+    set("s1-atr", fmtPrice(d.ATR), "val-cyan");
+    set("s1-atr-state", `${d.ATR_State||"—"}  (${d.ATR_Pct!=null?fmt(d.ATR_Pct,2)+"% of price":"—"})`);
 
-    // ── Row 5: Sentiment ──────────────────────────────────────────────────
-    set("s1-liq",     d.Liquidity  || "N/A",
-        (d.Liquidity||"").includes("High") ? "val-up" : (d.Liquidity||"").includes("Low") ? "val-down" : "val-neutral");
-    set("s1-liq-sub", d.Volume24h ? `Vol 24h: ${fmtBig(d.Volume24h)}` : "");
+    set("s1-vol-regime", d.VolRegime || "N/A",
+        d.VolRegime==="Low"?"val-up":d.VolRegime==="Extreme"||d.VolRegime==="High"?"val-down":"val-neutral");
+    set("s1-hist-vol", d.HistVol != null ? `HV: ${fmt(d.HistVol,1)}%` : "HV: —");
 
-    set("s1-fg",     d.FearGreed || "N/A",
-        (d.FearGreed||"").includes("Greed") ? "val-down" : (d.FearGreed||"").includes("Fear") ? "val-up" : "val-neutral");
-    set("s1-fg-sub", d.FearGreedScore != null ? `Score: ${fmt(d.FearGreedScore,0)}/100` : "");
+    set("s1-bb-pos", d.BB_Position || "N/A");
+    set("s1-bb-squeeze", d.BB_Squeeze ? "🔥 Squeeze Active" : "No Squeeze",
+        d.BB_Squeeze ? "val-down" : "val-neutral");
 
-    set("s1-risk",     d.RiskScore != null ? fmt(d.RiskScore,0) : "N/A", riskColor(d.RiskScore));
-    set("s1-risk-sub", d.RiskScore != null
-        ? (d.RiskScore<=30?"Low risk":d.RiskScore<=60?"Moderate risk":"High risk") : "");
+    const kcPos = price > (d.KC_Upper||0) ? "Above KC" :
+                  price < (d.KC_Lower||0) ? "Below KC" : "Inside KC";
+    set("s1-kc", kcPos);
+    set("s1-kc-sub", `U: ${fmtPrice(d.KC_Upper)}  L: ${fmtPrice(d.KC_Lower)}`);
 
-    set("s1-conf",     d.Confidence != null ? `${fmt(d.Confidence,0)}%` : "N/A", confColor(d.Confidence));
-    set("s1-conf-sub", d.Confidence != null
-        ? (d.Confidence>=65?"High confidence":d.Confidence>=45?"Moderate":"Low confidence") : "");
+    // ── Volume ────────────────────────────────────────────────────────────
+    const rvolV = d.RVOL != null ? fmt(d.RVOL,2) : "—";
+    set("s1-rvol", `${rvolV}x`,
+        d.RVOL>=2?"val-down":d.RVOL>=1.5?"val-up":"val-neutral");
+    set("s1-vol-trend", d.VolTrend || "N/A");
 
-    // ── Summary ───────────────────────────────────────────────────────────
-    const items = [
-        { label:"Symbol",        value: d.Symbol,                   cls: "val-cyan" },
-        { label:"Mode",          value: d.Mode,                     cls: "" },
-        { label:"Trend",         value: d.Trend,                    cls: trendColor(d.Trend) },
-        { label:"Signal",        value: d.Signal,                   cls: signalColor(d.Signal) },
-        { label:"RSI",           value: d.RSI != null ? fmt(d.RSI,1) : "N/A", cls: "" },
-        { label:"ADX",           value: d.ADX != null ? fmt(d.ADX,1) : "N/A", cls: d.ADX>=25?"val-up":"val-neutral" },
-        { label:"Volatility",    value: d.Volatility,               cls: d.Volatility==="Low"?"val-up":"val-neutral" },
-        { label:"Market Health", value: d.MarketHealth,             cls: trendColor(d.MarketHealth) },
-        { label:"Liquidity",     value: d.Liquidity,                cls: "" },
-        { label:"Fear & Greed",  value: d.FearGreed,                cls: "" },
-        { label:"Risk Score",    value: d.RiskScore!=null?fmt(d.RiskScore,0)+"":"N/A", cls: riskColor(d.RiskScore) },
-        { label:"Confidence",    value: d.Confidence!=null?fmt(d.Confidence,0)+"%":"N/A", cls: confColor(d.Confidence) },
-    ];
-    const sg = document.getElementById("s1-summary-grid");
-    if (sg) {
-        sg.innerHTML = items.map(i =>
-            `<div class="summary-item">
-               <span class="si-label">${i.label}</span>
-               <span class="si-value ${i.cls}">${i.value || "N/A"}</span>
-             </div>`).join("");
+    set("s1-buy-press", d.BuyPressure!=null ? `${fmt(d.BuyPressure,0)}%` : "—", "val-up");
+    set("s1-sell-press", `Sell: ${d.SellPressure!=null?fmt(d.SellPressure,0)+"%":"—"}`, "val-down");
+
+    set("s1-vwap", fmtPrice(d.VWAP), "val-cyan");
+    set("s1-vwap-sub", d.PriceVsVWAP || "N/A",
+        (d.PriceVsVWAP||"").includes("Above")?"val-up":"val-down");
+
+    set("s1-vol-spike", d.VolSpike ? "🔥 SPIKE" : "Normal",
+        d.VolSpike ? "val-down" : "val-neutral");
+
+    // ── Multi TF ──────────────────────────────────────────────────────────
+    const tfMap = {
+        "s1-mtf-5m":  d.MTF_5m,
+        "s1-mtf-15m": d.MTF_15m,
+        "s1-mtf-1h":  d.MTF_1h,
+        "s1-mtf-4h":  d.MTF_4h,
+        "s1-mtf-1d":  d.MTF_1D,
+    };
+    for (const [id, val] of Object.entries(tfMap)) {
+        set(id, val || "N/A", trendColor(val));
+    }
+    set("s1-mtf-bias", d.MTF_Bias || "N/A", trendColor(d.MTF_Bias));
+    set("s1-mtf-align", `Alignment: ${d.MTF_Align!=null?fmt(d.MTF_Align,0)+"%":"—"}`);
+
+    set("s1-support", d.Support ? `S: ${fmtPrice(d.Support)}` : "S: —", "val-up");
+    set("s1-resist",  d.Resistance ? `R: ${fmtPrice(d.Resistance)}` : "R: —", "val-down");
+
+    // ── AI Confidence ─────────────────────────────────────────────────────
+    set("s1-conf", d.Confidence!=null ? `${fmt(d.Confidence,0)}%` : "—", confColor(d.Confidence));
+    set("s1-conf-grade", `Grade: ${d.ConfGrade || "—"}`);
+    const explain = Array.isArray(d.ConfExplain) && d.ConfExplain.length
+        ? d.ConfExplain.map(e => `• ${e}`).join("<br>")
+        : "—";
+    const explainEl = document.getElementById("s1-conf-explain");
+    if (explainEl) explainEl.innerHTML = explain;
+
+    // ── Risk ──────────────────────────────────────────────────────────────
+    set("s1-risk", d.RiskScore!=null ? fmt(d.RiskScore,0) : "—", riskColor(d.RiskScore));
+    set("s1-risk-cat", d.RiskCategory || "N/A");
+    set("s1-pos-size", d.PositionSize!=null ? `${fmt(d.PositionSize,1)}%` : "—");
+    set("s1-max-risk",  d.MaxRiskPct!=null  ? `${fmt(d.MaxRiskPct,1)}%`  : "—");
+    set("s1-leverage",  d.Leverage || "—");
+
+    // ── AI Summary ────────────────────────────────────────────────────────
+    set("s1-bias",     d.Bias     || "N/A", trendColor(d.Bias));
+    set("s1-strength", `Strength: ${d.Strength || "—"}`);
+    set("s1-prob",     d.Probability!=null ? `${fmt(d.Probability,0)}%` : "—",
+        d.Probability>=65?"val-up":d.Probability<=35?"val-down":"val-neutral");
+
+    const recEl = document.getElementById("s1-rec-status");
+    if (recEl) {
+        const ready = (d.Status||"").includes("Ready");
+        recEl.textContent = d.Status || "—";
+        recEl.className   = "a-val " + (ready ? "val-up" : "val-down");
+    }
+
+    const hlEl = document.getElementById("s1-highlights");
+    if (hlEl && Array.isArray(d.Highlights) && d.Highlights.length) {
+        hlEl.innerHTML = d.Highlights.map(h => `• ${h}`).join("<br>");
     }
 }
 

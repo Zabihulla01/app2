@@ -108,97 +108,103 @@ CACHE_SECONDS = SCANNER_CACHE_SECONDS   # from crypto_config
 
 app = FastAPI()
 
+def _normalize_symbol(sym: str) -> str:
+    """Normalize crypto symbol to internal format (BTC-USD).
+    Accepts: BTCUSDT, BTCUSD, BTC-USD, BTC — all → BTC-USD
+    """
+    s = sym.upper().strip()
+    if "-" not in s:
+        s = s.removesuffix("USDT").removesuffix("USD") + "-USD"
+    return s
+
 # ── Binance WebSocket Live Price Store ───────────────────────────────────────
-# Real-time prices from Kraken public WebSocket (no API key required).
-# Free, legal, sub-second updates — same price as TradingView.
-# Note: Binance WS is geo-blocked on some AWS regions; Kraken works globally.
-# Shape: { "BTC-USD": {"price": 65000.0, "ts": "...", "source": "kraken"}, ... }
+# Real-time prices from Binance public WebSocket (no API key required).
+# Free, sub-second updates — same price as TradingView.
+# Tested working from this AWS region.
+# Shape: { "BTC-USD": {"price": 65000.0, "ts": "...", "source": "binance"}, ... }
 _binance_prices: dict = {}
 _binance_ws_clients: list = []   # connected dashboard WebSocket clients
 
-# Kraken pair name → internal symbol
-# Kraken uses XBT for Bitcoin and XDG for Dogecoin
-KRAKEN_PAIR_MAP = {
-    "XBT/USD":  "BTC-USD",
-    "ETH/USD":  "ETH-USD",
-    "SOL/USD":  "SOL-USD",
-    "BNB/USD":  "BNB-USD",
-    "XRP/USD":  "XRP-USD",
-    "ADA/USD":  "ADA-USD",
-    "XDG/USD":  "DOGE-USD",
-    "AVAX/USD": "AVAX-USD",
-    "DOT/USD":  "DOT-USD",
-    "LINK/USD": "LINK-USD",
+# Binance stream name → internal symbol
+# Binance uses USDT pairs (treated as USD for display)
+BINANCE_TICKER_MAP = {
+    "btcusdt":  "BTC-USD",
+    "ethusdt":  "ETH-USD",
+    "solusdt":  "SOL-USD",
+    "bnbusdt":  "BNB-USD",
+    "xrpusdt":  "XRP-USD",
+    "adausdt":  "ADA-USD",
+    "dogeusdt": "DOGE-USD",
+    "avaxusdt": "AVAX-USD",
+    "dotusdt":  "DOT-USD",
+    "linkusdt": "LINK-USD",
 }
 
 async def _binance_ws_task():
     """
-    Background task: connects to Kraken public WebSocket, subscribes to
-    ticker for all configured crypto pairs, stores latest prices in
-    _binance_prices dict (reused name for compatibility), and pushes
-    real-time updates to all connected dashboard clients.
+    Background task: connects to Binance public WebSocket combined stream,
+    subscribes to miniTicker for all configured crypto pairs, stores latest
+    prices in _binance_prices dict, and pushes real-time updates to all
+    connected dashboard clients.
 
-    Kraken is used because Binance WS is geo-blocked on some AWS regions.
-    Both are free, public market data — no API key required.
+    Binance free public API — no API key required.
     Reconnects automatically on disconnect or error.
+
+    Binance miniTicker fields used:
+      s = symbol (e.g. BTCUSDT)
+      c = last price
     """
-    uri = "wss://ws.kraken.com"
-    subscribe_msg = {
-        "event": "subscribe",
-        "pair":  list(KRAKEN_PAIR_MAP.keys()),
-        "subscription": {"name": "ticker"},
-    }
+    # Build combined stream URL: /stream?streams=btcusdt@miniTicker/ethusdt@miniTicker/...
+    streams = "/".join(f"{sym}@miniTicker" for sym in BINANCE_TICKER_MAP.keys())
+    uri = f"wss://stream.binance.com:9443/stream?streams={streams}"
 
     while True:
         try:
-            logger.info("Kraken WS: connecting — %d pairs", len(KRAKEN_PAIR_MAP))
+            logger.info("Binance WS: connecting — %d pairs", len(BINANCE_TICKER_MAP))
             async with websockets.connect(uri, ping_interval=20, ping_timeout=10) as ws:
-                await ws.send(json.dumps(subscribe_msg))
-                logger.info("Kraken WS: subscribed to %d pairs", len(KRAKEN_PAIR_MAP))
+                logger.info("Binance WS: connected to %d pairs", len(BINANCE_TICKER_MAP))
                 async for raw in ws:
                     try:
                         msg = json.loads(raw)
-                        # Kraken ticker format: [channelID, {ticker_data}, "ticker", "XBT/USD"]
-                        if (isinstance(msg, list) and len(msg) == 4
-                                and msg[2] == "ticker"):
-                            pair   = msg[3]          # e.g. "XBT/USD"
-                            ticker = msg[1]
-                            symbol = KRAKEN_PAIR_MAP.get(pair)
-                            if symbol and "c" in ticker:
-                                price = float(ticker["c"][0])   # last trade price
-                                ts    = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-                                _binance_prices[symbol] = {
-                                    "price":  price,
-                                    "ts":     ts,
-                                    "pair":   pair,
-                                    "source": "kraken",
-                                }
-                                # Push real-time update to all connected dashboard clients
-                                if _binance_ws_clients:
-                                    payload = json.dumps({"LivePrices": _binance_prices})
-                                    dead = []
-                                    for client in list(_binance_ws_clients):
-                                        try:
-                                            if client.client_state == WebSocketState.CONNECTED:
-                                                await client.send_text(payload)
-                                            else:
-                                                dead.append(client)
-                                        except Exception:
+                        # Binance combined stream format: {"stream": "btcusdt@miniTicker", "data": {...}}
+                        data = msg.get("data", {})
+                        stream_sym = data.get("s", "").lower()   # e.g. "btcusdt"
+                        symbol = BINANCE_TICKER_MAP.get(stream_sym)
+                        if symbol and "c" in data:
+                            price = float(data["c"])             # last price
+                            ts    = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+                            _binance_prices[symbol] = {
+                                "price":  price,
+                                "ts":     ts,
+                                "pair":   data.get("s", stream_sym),
+                                "source": "binance",
+                            }
+                            # Push real-time update to all connected dashboard clients
+                            if _binance_ws_clients:
+                                payload = json.dumps({"LivePrices": _binance_prices})
+                                dead = []
+                                for client in list(_binance_ws_clients):
+                                    try:
+                                        if client.client_state == WebSocketState.CONNECTED:
+                                            await client.send_text(payload)
+                                        else:
                                             dead.append(client)
-                                    for d in dead:
-                                        if d in _binance_ws_clients:
-                                            _binance_ws_clients.remove(d)
+                                    except Exception:
+                                        dead.append(client)
+                                for d in dead:
+                                    if d in _binance_ws_clients:
+                                        _binance_ws_clients.remove(d)
                     except Exception as parse_err:
-                        logger.warning("Kraken WS parse error: %s", parse_err)
+                        logger.warning("Binance WS parse error: %s", parse_err)
         except Exception as conn_err:
-            logger.warning("Kraken WS disconnected: %s — reconnecting in 5s", conn_err)
+            logger.warning("Binance WS disconnected: %s — reconnecting in 5s", conn_err)
             await asyncio.sleep(5)
 
 @app.on_event("startup")
 async def startup_event():
-    """Start Kraken WebSocket background task on app startup."""
+    """Start Binance WebSocket background task on app startup."""
     asyncio.create_task(_binance_ws_task())
-    logger.info("Kraken WebSocket background task started — %d pairs", len(KRAKEN_PAIR_MAP))
+    logger.info("Binance WebSocket background task started — %d pairs", len(BINANCE_TICKER_MAP))
 
 # Crypto symbols to scan — edit crypto_config.py to add more coins
 SCAN_STOCKS = SCAN_SYMBOLS   # ["BTC-USD", "ETH-USD", ...]
@@ -295,6 +301,7 @@ def backtest(
     BACKTEST_RUNS.inc()
     YF_REQUESTS.inc()
 
+    stock = _normalize_symbol(stock)
 
     cfg = CRYPTO_SECTOR_CONFIG.get(
 
@@ -2289,262 +2296,229 @@ def stage0_scanner(mode: str = "INTRADAY"):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAGE 1 — Market Analysis (dedicated endpoint, always complete)
+# STAGE 1 — Advanced Market Intelligence Engine
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/stage1/analyze/{stock}")
 def stage1_analyze(stock: str, mode: str = "INTRADAY"):
     """
-    Stage 1: Full market analysis.
-    Returns every indicator the UI needs, guaranteed non-null.
-    Falls back to backtest data when the two-stage pipeline is unavailable.
+    Stage 1: Advanced Market Intelligence.
+    Runs full analysis: Price Action, SMC, Trend, Momentum, Volatility,
+    Volume, Market Health, Multi-TF, AI Confidence, Risk, AI Summary.
+    Never recommends a trade. Stage 2 makes that decision.
     """
     REQUESTS.inc()
     _log("INFO", event="stage1_analyze", stock=stock, mode=mode)
 
-    sym = stock.upper()
+    sym = _normalize_symbol(stock)
 
-    # ── 1. Backtest (always works, has RSI/ADX/ATR/Signal) ────────────────
+    # ── 1. Fetch OHLCV data via Binance (fast, no rate limit) ─────────────
+    from binance import fetch_ohlcv_binance, fetch_live_price_binance
+
+    df_1h = fetch_ohlcv_binance(sym, "1h")
+    df_1d = fetch_ohlcv_binance(sym, "1d")
+    df_4h = fetch_ohlcv_binance(sym, "4h")
+    df_15m= fetch_ohlcv_binance(sym, "15m")
+
+    # ── 2. Backtest metrics ────────────────────────────────────────────────
     try:
         bt = backtest(sym, mode=mode)
     except Exception as e:
         _log("ERROR", event="stage1_backtest_error", stock=sym, error=str(e))
         bt = {}
 
-    # ── 2. Live prices ────────────────────────────────────────────────────
-    live = {}
-    try:
-        cg_id = SYMBOL_TO_COINGECKO.get(sym)
-        if cg_id:
-            raw = fetch_live_prices([cg_id])
-            live = raw.get(cg_id, {})
-    except Exception as e:
-        _log("ERROR", event="stage1_live_price_error", stock=sym, error=str(e))
+    bt_metrics = {
+        "win_rate":       bt.get("WinRate",      0) or 0,
+        "profit_factor":  bt.get("ProfitFactor", 0) or 0,
+        "sharpe":         bt.get("Sharpe",        0) or 0,
+        "max_drawdown":   bt.get("MaxDrawdown",   20) or 20,
+    }
 
-    # ── 3. Two-stage analysis (may return NO TRADE — that's OK) ──────────
-    # ── 4. Derive all values, backtest is the authoritative source ────────
-    entry       = bt.get("EntryPrice",   0) or 0
-    atr         = bt.get("ATR",          0) or 0
-    rsi_val     = bt.get("RSI",         50) or 50
-    adx_val     = bt.get("ADX",          0) or 0
-    signal      = bt.get("Signal",    "SELL")
-    conf        = bt.get("Confidence",   0) or 0
-    risk_sc     = bt.get("RiskScore",    0) or 0
-    win_rate    = bt.get("WinRate",      0) or 0
-    pf          = bt.get("ProfitFactor", 0) or 0
-    sharpe      = bt.get("Sharpe",       0) or 0
-    max_dd      = bt.get("MaxDrawdown",  0) or 0
-    sl          = bt.get("StopLoss",     0) or 0
-    target      = bt.get("Target",       0) or 0
-    rr          = bt.get("RiskReward",   0) or 0
-    bt_mode     = bt.get("Mode",        mode)
+    # ── 3. Live price from Binance ─────────────────────────────────────────
+    live = fetch_live_price_binance(sym)
 
-    live_price  = live.get("price")    or entry
-    change_24h  = live.get("change_24h")
-    vol_24h     = live.get("volume_24h")
-    mcap        = live.get("market_cap")
-    high_24h    = live.get("high_24h")
-    low_24h     = live.get("low_24h")
+    # ── 4. Run Stage 1 analysis engine ────────────────────────────────────
+    multi_tf_dfs = {}
+    for tf, df_tf in [("15m", df_15m), ("1h", df_1h), ("4h", df_4h), ("1D", df_1d)]:
+        if df_tf is not None and not df_tf.empty:
+            multi_tf_dfs[tf] = df_tf
 
-    # ── Derived indicators ────────────────────────────────────────────────
-    # EMA proxies from entry + ATR offsets
-    ema20  = round(entry - 0.3 * atr, 4) if entry and atr else 0
-    ema50  = round(entry - 0.8 * atr, 4) if entry and atr else 0
-    ema200 = round(entry - 2.5 * atr, 4) if entry and atr else 0
+    primary_df = df_1h if not df_1h.empty else df_1d
 
-    # EMA alignment
-    if ema20 > ema50 > ema200:
-        ema_align = "BULLISH"
-    elif ema20 < ema50 < ema200:
-        ema_align = "BEARISH"
-    else:
-        ema_align = "MIXED"
+    if primary_df.empty:
+        return {
+            "Stage": 1, "Symbol": sym, "Error": "Insufficient OHLCV data",
+            "summary": {"status": "Wait for Better Setup", "bias": "Neutral",
+                        "strength": "Weak", "probability": 0}
+        }
 
-    # Trend
-    if signal in ("BUY", "STRONG BUY"):
-        trend = "BULLISH"
-    elif signal in ("SELL", "STRONG SELL"):
-        trend = "BEARISH"
-    else:
-        trend = "NEUTRAL"
+    cache = run_stage1_analysis(
+        symbol=sym,
+        df=primary_df,
+        df_higher_tf=df_1d,
+        timeframe="1h",
+        backtest_metrics=bt_metrics,
+        multi_tf_dfs=multi_tf_dfs,
+    )
 
-    # Trend strength
-    if win_rate >= 65:
-        trend_strength = "Strong"
-    elif win_rate >= 50:
-        trend_strength = "Moderate"
-    elif win_rate >= 35:
-        trend_strength = "Weak"
-    else:
-        trend_strength = "Very Weak"
+    # ── 5. Build flat response for the UI ─────────────────────────────────
+    pa   = cache.get("price_action", {})
+    smc  = cache.get("smc", {})
+    tr   = cache.get("trend", {})
+    mom  = cache.get("momentum", {})
+    vol  = cache.get("volatility", {})
+    volu = cache.get("volume", {})
+    mh   = cache.get("market_health", {})
+    mtf  = cache.get("multi_timeframe", {})
+    conf = cache.get("confidence", {})
+    risk = cache.get("risk", {})
+    summ = cache.get("summary", {})
 
-    # Market structure
-    if signal in ("STRONG BUY",):
-        market_struct = "Higher Highs / Higher Lows"
-    elif signal == "BUY":
-        market_struct = "Higher Lows forming"
-    elif signal in ("STRONG SELL",):
-        market_struct = "Breakdown structure"
-    elif signal == "SELL":
-        market_struct = "Lower Highs / Lower Lows"
-    else:
-        market_struct = "Consolidation range"
-
-    # MACD proxy
-    if pf >= 1.5 and signal in ("BUY", "STRONG BUY"):
-        macd_signal = "Bullish Cross"
-    elif pf >= 1.2 and signal in ("BUY", "STRONG BUY"):
-        macd_signal = "Bullish"
-    elif pf < 1.0:
-        macd_signal = "Bearish"
-    else:
-        macd_signal = "Neutral"
-
-    # Bollinger band position proxy
-    if max_dd <= 5 and conf >= 65:
-        bb_position = "Near Upper Band"
-    elif max_dd >= 20:
-        bb_position = "Near Lower Band"
-    else:
-        bb_position = "Inside Bands"
-
-    # Multi-TF confirmation proxy
-    if sharpe >= 1.5:
-        mtf_label = "Aligned Bullish" if signal in ("BUY","STRONG BUY") else "Aligned Bearish"
-        mtf_strength = 85
-    elif sharpe >= 0.5:
-        mtf_label = "Partially Aligned"
-        mtf_strength = 60
-    else:
-        mtf_label = "Conflicting TFs"
-        mtf_strength = 30
-
-    # Volatility
-    atr_pct = round(atr / live_price * 100, 2) if live_price and atr else 0
-    if atr_pct >= 5:
-        volatility_label = "Extreme"
-    elif atr_pct >= 2.5:
-        volatility_label = "High"
-    elif atr_pct >= 1:
-        volatility_label = "Moderate"
-    else:
-        volatility_label = "Low"
-
-    # Support / resistance from entry ± ATR
-    support    = round(entry - 1.5 * atr, 4) if entry and atr else 0
-    resistance = round(entry + 1.5 * atr, 4) if entry and atr else 0
-
-    # Liquidity
-    if vol_24h and mcap and mcap > 0:
-        vol_ratio = vol_24h / mcap
-        if vol_ratio >= 0.15:
-            liquidity_label = "Very High"
-        elif vol_ratio >= 0.06:
-            liquidity_label = "High"
-        elif vol_ratio >= 0.02:
-            liquidity_label = "Moderate"
-        else:
-            liquidity_label = "Low"
-    else:
-        liquidity_label = "N/A"
-
-    # Fear & Greed proxy
-    if change_24h is not None and vol_24h and mcap:
-        vr = vol_24h / mcap if mcap else 0
-        fg_score = min(100, max(0, 50 + change_24h * 2 + vr * 100))
-        if fg_score >= 75:
-            fg_label = "Extreme Greed"
-        elif fg_score >= 60:
-            fg_label = "Greed"
-        elif fg_score >= 45:
-            fg_label = "Neutral"
-        elif fg_score >= 25:
-            fg_label = "Fear"
-        else:
-            fg_label = "Extreme Fear"
-    else:
-        fg_score = None
-        fg_label = "N/A"
-
-    # Market health composite
-    health_score = (conf * 0.4) + ((100 - risk_sc) * 0.3) + (win_rate * 0.3)
-    if health_score >= 75:
-        health_label = "Healthy"
-    elif health_score >= 55:
-        health_label = "Neutral"
-    elif health_score >= 35:
-        health_label = "Caution"
-    else:
-        health_label = "Weak"
-
-    # RSI zone
-    if rsi_val >= 70:
-        rsi_zone = "Overbought"
-    elif rsi_val >= 60:
-        rsi_zone = "Bullish Zone"
-    elif rsi_val >= 40:
-        rsi_zone = "Neutral"
-    elif rsi_val >= 30:
-        rsi_zone = "Bearish Zone"
-    else:
-        rsi_zone = "Oversold"
+    live_price = live.get("price") or bt.get("EntryPrice", 0) or cache.get("current_price", 0)
 
     return {
-        "Stage": 1,
-        "Symbol": sym,
-        "Mode": bt_mode,
-        # ── Price ────────────────────────────────────────────────────────
-        "LivePrice":        round(live_price, 4) if live_price else None,
-        "EntryPrice":       round(entry, 4),
-        "Change24h":        change_24h,
-        "Volume24h":        vol_24h,
-        "MarketCap":        mcap,
-        "High24h":          high_24h,
-        "Low24h":           low_24h,
-        # ── Trend ────────────────────────────────────────────────────────
-        "Trend":            trend,
-        "TrendStrength":    trend_strength,
-        "MarketStructure":  market_struct,
-        "Signal":           signal,
-        # ── Indicators ───────────────────────────────────────────────────
-        "RSI":              round(rsi_val, 2),
-        "RSIZone":          rsi_zone,
-        "ADX":              round(adx_val, 2),
-        "ATR":              round(atr, 4),
-        "ATRPercent":       atr_pct,
-        "MACD":             macd_signal,
-        "EMA20":            ema20,
-        "EMA50":            ema50,
-        "EMA200":           ema200,
-        "EMAAlignment":     ema_align,
-        "BBPosition":       bb_position,
-        "MultiTFLabel":     mtf_label,
-        "MultiTFStrength":  mtf_strength,
-        # ── Levels ───────────────────────────────────────────────────────
-        "StopLoss":         round(sl, 4),
-        "Target":           round(target, 4),
-        "Support":          support,
-        "Resistance":       resistance,
-        "RiskReward":       round(rr, 2),
-        # ── Scores ───────────────────────────────────────────────────────
-        "Confidence":       conf,
-        "RiskScore":        risk_sc,
-        "WinRate":          win_rate,
-        "ProfitFactor":     round(pf, 2),
-        "Sharpe":           round(sharpe, 2),
-        "MaxDrawdown":      round(max_dd, 2),
-        # ── Market conditions ─────────────────────────────────────────────
-        "Volatility":       volatility_label,
-        "VolatilityPct":    atr_pct,
-        "Liquidity":        liquidity_label,
-        "FearGreed":        fg_label,
-        "FearGreedScore":   round(fg_score, 1) if fg_score is not None else None,
-        "MarketHealth":     health_label,
-        "MarketHealthScore":round(health_score, 1),
+        "Stage":   1,
+        "Symbol":  sym,
+        "Mode":    mode,
+
+        # Price
+        "LivePrice":   round(float(live_price), 4) if live_price else None,
+        "EntryPrice":  round(float(live_price), 4) if live_price else None,
+        "Change24h":   live.get("change_24h"),
+        "Volume24h":   live.get("volume_24h"),
+        "High24h":     live.get("high_24h"),
+        "Low24h":      live.get("low_24h"),
+
+        # Price Action
+        "PA_Structure":  pa.get("structure"),
+        "PA_Bias":       pa.get("structure_bias"),
+        "PA_SwingHigh":  pa.get("swing_high"),
+        "PA_SwingLow":   pa.get("swing_low"),
+        "PA_HH":         pa.get("higher_high"),
+        "PA_HL":         pa.get("higher_low"),
+        "PA_LH":         pa.get("lower_high"),
+        "PA_LL":         pa.get("lower_low"),
+        "PA_BOS":        pa.get("bos"),
+        "PA_CHoCH":      pa.get("choch"),
+
+        # SMC
+        "SMC_OB_Bull":   smc.get("order_block_bull"),
+        "SMC_OB_Bear":   smc.get("order_block_bear"),
+        "SMC_FVG_Bull":  smc.get("fvg_bull"),
+        "SMC_FVG_Bear":  smc.get("fvg_bear"),
+        "SMC_LiqHigh":   smc.get("liquidity_zone_high"),
+        "SMC_LiqLow":    smc.get("liquidity_zone_low"),
+        "SMC_Sweep":     smc.get("liquidity_sweep"),
+        "SMC_Breaker":   smc.get("breaker_block"),
+        "SMC_Mitigation":smc.get("mitigation_block"),
+
+        # Trend
+        "Trend":          tr.get("direction"),
+        "EMA_Alignment":  tr.get("ema_alignment"),
+        "EMA9":           tr.get("ema9"),
+        "EMA21":          tr.get("ema21"),
+        "EMA50":          tr.get("ema50"),
+        "EMA200":         tr.get("ema200"),
+        "Supertrend":     tr.get("supertrend"),
+        "ADX":            tr.get("adx"),
+        "ADX_Strength":   tr.get("adx_strength"),
+        "PlusDI":         tr.get("plus_di"),
+        "MinusDI":        tr.get("minus_di"),
+        "DI_Bias":        tr.get("di_bias"),
+        "TrendScore":     tr.get("strength_score"),
+
+        # Momentum
+        "RSI":           mom.get("rsi"),
+        "RSI_Zone":      mom.get("rsi_zone"),
+        "MACD_Trend":    mom.get("macd_trend"),
+        "MACD_Cross":    mom.get("macd_cross"),
+        "StochRSI_K":    mom.get("stochrsi_k"),
+        "StochRSI_Zone": mom.get("stochrsi_zone"),
+        "StochRSI_Cross":mom.get("stochrsi_cross"),
+        "CCI":           mom.get("cci"),
+        "CCI_Signal":    mom.get("cci_signal"),
+        "MomScore":      mom.get("score"),
+        "MomLabel":      mom.get("label"),
+
+        # Volatility
+        "ATR":           vol.get("atr"),
+        "ATR_Pct":       vol.get("atr_pct"),
+        "ATR_State":     vol.get("atr_state"),
+        "VolRegime":     vol.get("regime"),
+        "BB_Upper":      vol.get("bb_upper"),
+        "BB_Middle":     vol.get("bb_middle"),
+        "BB_Lower":      vol.get("bb_lower"),
+        "BB_Width":      vol.get("bb_width"),
+        "BB_Position":   vol.get("bb_position"),
+        "BB_Squeeze":    vol.get("bb_squeeze"),
+        "KC_Upper":      vol.get("kc_upper"),
+        "KC_Lower":      vol.get("kc_lower"),
+        "HistVol":       vol.get("hist_vol"),
+
+        # Volume
+        "RVOL":          volu.get("rvol"),
+        "VolTrend":      volu.get("trend"),
+        "VolSpike":      volu.get("spike"),
+        "BuyPressure":   volu.get("buy_pressure"),
+        "SellPressure":  volu.get("sell_pressure"),
+        "VWAP":          volu.get("vwap"),
+        "PriceVsVWAP":   volu.get("price_vs_vwap"),
+
+        # Market Health
+        "BullScore":      mh.get("bull_score"),
+        "BearScore":      mh.get("bear_score"),
+        "NeutralScore":   mh.get("neutral_score"),
+        "MarketHealth":   mh.get("label"),
+        "HealthScore":    mh.get("overall_score"),
+
+        # Multi-TF
+        "MTF_5m":         mtf.get("timeframes", {}).get("5m", "Neutral"),
+        "MTF_15m":        mtf.get("timeframes", {}).get("15m", "Neutral"),
+        "MTF_1h":         mtf.get("timeframes", {}).get("1h", "Neutral"),
+        "MTF_4h":         mtf.get("timeframes", {}).get("4h", "Neutral"),
+        "MTF_1D":         mtf.get("timeframes", {}).get("1D", "Neutral"),
+        "MTF_Bias":       mtf.get("overall_bias"),
+        "MTF_Align":      mtf.get("alignment_score"),
+
+        # AI Confidence
+        "Confidence":     conf.get("score"),
+        "ConfGrade":      conf.get("grade"),
+        "ConfExplain":    conf.get("explanation"),
+
+        # Risk
+        "RiskScore":      risk.get("score"),
+        "RiskCategory":   risk.get("category"),
+        "PositionSize":   risk.get("position_size"),
+        "MaxRiskPct":     risk.get("max_risk_pct"),
+        "Leverage":       risk.get("leverage"),
+
+        # Support / Resistance
+        "Support":    cache.get("support"),
+        "Resistance": cache.get("resistance"),
+
+        # AI Summary
+        "Bias":        summ.get("bias"),
+        "Strength":    summ.get("strength"),
+        "Probability": summ.get("probability"),
+        "Status":      summ.get("status"),
+        "Highlights":  summ.get("highlights"),
+
+        # Legacy fields for Stage 2 compatibility
+        "Signal":          "BUY" if summ.get("bias") == "Bullish" else "SELL" if summ.get("bias") == "Bearish" else "NEUTRAL",
+        "TrendStrength":   tr.get("adx_strength"),
+        "MarketStructure": pa.get("structure"),
+        "EMAAlignment":    tr.get("ema_alignment"),
+        "Volatility":      vol.get("regime"),
+        "WinRate":         bt_metrics["win_rate"],
+        "ProfitFactor":    bt_metrics["profit_factor"],
+        "Sharpe":          bt_metrics["sharpe"],
+        "MaxDrawdown":     bt_metrics["max_drawdown"],
+        "StopLoss":        bt.get("StopLoss", 0),
+        "Target":          bt.get("Target", 0),
+        "RiskReward":      bt.get("RiskReward", 0),
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # STAGE 2 — Trade Recommendation (dedicated endpoint)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -2557,7 +2531,7 @@ def stage2_recommend(stock: str, mode: str = "INTRADAY"):
     REQUESTS.inc()
     _log("INFO", event="stage2_recommend", stock=stock, mode=mode)
 
-    sym = stock.upper()
+    sym = _normalize_symbol(stock)
 
     try:
         bt = backtest(sym, mode=mode)

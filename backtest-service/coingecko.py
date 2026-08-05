@@ -201,68 +201,59 @@ def _resample_to_4h(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── Public: fetch OHLCV ───────────────────────────────────────────────────────
 
+# ── Public: fetch OHLCV ───────────────────────────────────────────────────────
+
 def fetch_ohlcv(symbol, timeframe="1h"):
     """
     Fetch OHLCV data for a crypto symbol.
 
+    Data source priority:
+      1. Binance REST API  — primary (fast, no rate limit)
+      2. CoinGecko         — fallback if Binance returns insufficient data
+      3. yfinance          — last resort fallback
+
     Parameters
     ----------
-    symbol    : yfinance symbol, e.g. "BTC-USD"
+    symbol    : yfinance/internal symbol, e.g. "BTC-USD"
     timeframe : "15m" | "1h" | "4h" | "1d"
-
-    Data source routing (from crypto_config.TIMEFRAME_CONFIG):
-      "1d"  → CoinGecko OHLCV (primary) → yfinance (fallback)
-      "1h"  → CoinGecko OHLCV (primary) → yfinance (fallback)
-      "4h"  → yfinance 1h data resampled to 4h
-      "15m" → yfinance 15m data
 
     Returns
     -------
     pd.DataFrame with columns [Open, High, Low, Close, Volume]
     and a UTC-aware DatetimeIndex.  Empty DataFrame on failure.
     """
-    cfg = TIMEFRAME_CONFIG.get(timeframe, TIMEFRAME_CONFIG["1h"])
-    source   = cfg["source"]
-    cg_id    = SYMBOL_TO_COINGECKO.get(symbol)
+    from binance import fetch_ohlcv_binance
 
-    # ── CoinGecko path ────────────────────────────────────────────────────
+    # ── 1. Binance primary (fast, no rate limit) ──────────────────────────
+    df = fetch_ohlcv_binance(symbol, timeframe)
+    if not df.empty and len(df) >= 30:
+        return df
+
+    logger.warning("Binance returned %d rows for %s %s — trying CoinGecko", len(df), symbol, timeframe)
+
+    # ── 2. CoinGecko fallback ─────────────────────────────────────────────
+    cfg    = TIMEFRAME_CONFIG.get(timeframe, TIMEFRAME_CONFIG["1h"])
+    source = cfg["source"]
+    cg_id  = SYMBOL_TO_COINGECKO.get(symbol)
+
     if source == "coingecko" and cg_id:
         days     = cfg.get("days", 90)
         interval = cfg.get("interval", "hourly")
-        df = _build_ohlcv_from_chart(cg_id, days, interval)
+        df_cg = _build_ohlcv_from_chart(cg_id, days, interval)
+        if not df_cg.empty and len(df_cg) >= 30:
+            logger.info("CoinGecko fallback OK: %s %s (%d rows)", symbol, timeframe, len(df_cg))
+            return df_cg
 
-        if not df.empty and len(df) >= 30:
-            logger.info("CoinGecko OHLCV OK: %s %s (%d rows)", symbol, timeframe, len(df))
-            return df
+    # ── 3. yfinance last resort ───────────────────────────────────────────
+    logger.warning("CoinGecko insufficient for %s %s — falling back to yfinance", symbol, timeframe)
 
-        # Fallback to yfinance if CoinGecko returned insufficient data
-        logger.warning(
-            "CoinGecko returned %d rows for %s %s — falling back to yfinance",
-            len(df), symbol, timeframe,
-        )
-        yf_interval = "1h" if timeframe == "1h" else "1d"
-        return _yf_ohlcv(symbol, BACKTEST_PERIOD, yf_interval)
-
-    # ── 4h path (yfinance 1h → resample) ─────────────────────────────────
     if timeframe == "4h":
-        period = cfg.get("period", "60d")
-        df_1h  = _yf_ohlcv(symbol, period, "1h")
-        if df_1h.empty:
-            logger.warning("yfinance 1h empty for %s — cannot build 4h", symbol)
-            return pd.DataFrame()
-        return _resample_to_4h(df_1h)
+        df_1h = _yf_ohlcv(symbol, "60d", "1h")
+        if not df_1h.empty:
+            return _resample_to_4h(df_1h)
 
-    # ── 15m path (yfinance only) ─────────────────────────────────────────
-    if timeframe == "15m":
-        period = cfg.get("period", "60d")
-        df = _yf_ohlcv(symbol, period, "15m")
-        if df.empty:
-            logger.warning("yfinance 15m empty for %s", symbol)
-        return df
-
-    # ── Generic yfinance fallback ─────────────────────────────────────────
-    yf_interval = cfg.get("interval", "1h")
-    yf_period   = cfg.get("period", BACKTEST_PERIOD)
+    yf_interval = {"1d": "1d", "1h": "1h", "15m": "15m"}.get(timeframe, "1h")
+    yf_period   = "60d" if timeframe == "15m" else BACKTEST_PERIOD
     return _yf_ohlcv(symbol, yf_period, yf_interval)
 
 

@@ -1,8 +1,8 @@
 """
-Analysis Cache Module
-----------------------
-Stores all technical analysis results from Stage 1.
-Stage 2 (Decision Engine) reads ONLY from this cache.
+analysis_cache.py
+=================
+Stores all Stage 1 analysis results.
+Stage 2 reads ONLY from this cache — never recalculates.
 """
 
 from datetime import datetime
@@ -10,208 +10,183 @@ from typing import Dict, Any, Optional
 import json
 
 
-class AnalysisCache:
-    """
-    Structured cache for all technical analysis results.
-    Stage 1 populates this. Stage 2 reads from it.
-    """
-    
-    def __init__(self):
-        self.data: Dict[str, Any] = {}
-    
-    def create(self, symbol: str, timeframe: str) -> Dict[str, Any]:
-        """
-        Create a new cache structure for a symbol.
-        Returns the cache dict that Stage 1 will populate.
-        """
-        cache = {
-            # ── Metadata ──────────────────────────────────────────────
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            
-            # ── Price Action ──────────────────────────────────────────
-            "current_price": 0.0,
-            "atr": 0.0,
-            "volatility": 0.0,
-            
-            # ── Trend Analysis ────────────────────────────────────────
-            "trend": None,                    # "BULLISH" | "BEARISH" | "NEUTRAL"
-            "trend_strength": 0.0,            # 0-100
-            "market_structure": None,         # "UPTREND" | "DOWNTREND" | "RANGING"
-            "structure_break": False,         # True if structure broken
-            
-            # ── Support & Resistance ──────────────────────────────────
-            "support": 0.0,
-            "resistance": 0.0,
-            "support_strength": 0.0,
-            "resistance_strength": 0.0,
-            
-            # ── Volume Analysis ───────────────────────────────────────
-            "volume_analysis": {
-                "current_volume": 0.0,
-                "avg_volume": 0.0,
-                "volume_trend": None,         # "INCREASING" | "DECREASING" | "STABLE"
-                "volume_spike": False,
-            },
-            
-            # ── Liquidity Analysis ────────────────────────────────────
-            "liquidity_analysis": {
-                "liquidity_score": 0.0,       # 0-100
-                "spread": 0.0,
-                "depth": None,                # "HIGH" | "MEDIUM" | "LOW"
-            },
-            
-            # ── Volatility Analysis ───────────────────────────────────
-            "volatility_analysis": {
-                "atr_percentile": 0.0,        # ATR vs 14-day average
-                "volatility_regime": None,    # "HIGH" | "MEDIUM" | "LOW"
-                "bollinger_width": 0.0,
-            },
-            
-            # ── Technical Indicators ──────────────────────────────────
-            "rsi_analysis": {
-                "rsi": 0.0,
-                "signal": None,               # "OVERBOUGHT" | "OVERSOLD" | "NEUTRAL"
-                "divergence": False,
-            },
-            
-            "macd_analysis": {
-                "macd": 0.0,
-                "signal": 0.0,
-                "histogram": 0.0,
-                "trend": None,                # "BULLISH" | "BEARISH" | "NEUTRAL"
-                "crossover": False,
-            },
-            
-            "ema_analysis": {
-                "ema_9": 0.0,
-                "ema_21": 0.0,
-                "ema_50": 0.0,
-                "ema_200": 0.0,
-                "alignment": None,            # "BULLISH" | "BEARISH" | "MIXED"
-                "golden_cross": False,
-                "death_cross": False,
-            },
-            
-            "atr_analysis": {
-                "atr": 0.0,
-                "atr_multiple": 0.0,
-                "volatility_state": None,     # "EXPANDING" | "CONTRACTING" | "STABLE"
-            },
-            
-            "bollinger_analysis": {
-                "upper_band": 0.0,
-                "middle_band": 0.0,
-                "lower_band": 0.0,
-                "bandwidth": 0.0,
-                "position": None,             # "UPPER" | "MIDDLE" | "LOWER"
-                "squeeze": False,
-            },
-            
-            "adx_analysis": {
-                "adx": 0.0,
-                "plus_di": 0.0,
-                "minus_di": 0.0,
-                "trend_strength": None,       # "STRONG" | "WEAK" | "ABSENT"
-            },
-            
-            # ── Market Health ─────────────────────────────────────────
-            "market_health": {
-                "overall_score": 0.0,         # 0-100
-                "trend_quality": 0.0,
-                "momentum_quality": 0.0,
-                "volume_quality": 0.0,
-            },
-            
-            # ── Scoring ───────────────────────────────────────────────
-            "confidence_score": 0.0,          # 0-100
-            "risk_score": 0.0,                # 0-100
-            
-            # ── Multi-Timeframe Confirmation ──────────────────────────
-            "multi_timeframe_confirmation": {
-                "higher_tf_trend": None,      # From 1h or 4h
-                "alignment": False,           # Does current TF align with higher TF?
-                "confirmation_strength": 0.0,
-            },
-            
-            # ── Sentiment (if available) ──────────────────────────────
-            "fear_greed": None,               # 0-100 or None
-            
-            # ── AI Summary ────────────────────────────────────────────
-            "ai_summary": {
-                "bias": None,                 # "BULLISH" | "BEARISH" | "NEUTRAL"
-                "key_factors": [],            # List of key factors
-                "warnings": [],               # List of warnings
-                "opportunities": [],          # List of opportunities
-            },
-            
-            # ── Backtest Metrics ──────────────────────────────────────
-            "backtest_metrics": {
-                "win_rate": 0.0,
-                "profit_factor": 0.0,
-                "sharpe_ratio": 0.0,
-                "max_drawdown": 0.0,
-                "total_trades": 0,
-                "net_profit": 0.0,
-            },
-        }
-        
-        self.data[symbol] = cache
-        return cache
-    
-    def get(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Retrieve cached analysis for a symbol."""
-        return self.data.get(symbol)
-    
-    def exists(self, symbol: str) -> bool:
-        """Check if analysis exists for a symbol."""
-        return symbol in self.data
-    
-    def clear(self, symbol: Optional[str] = None):
-        """Clear cache for a specific symbol or all symbols."""
-        if symbol:
-            self.data.pop(symbol, None)
-        else:
-            self.data.clear()
-    
-    def export_json(self, symbol: str) -> str:
-        """Export cache to JSON string."""
-        cache = self.get(symbol)
-        if not cache:
-            return "{}"
-        return json.dumps(cache, indent=2)
-    
-    def to_dict(self, symbol: str) -> Dict[str, Any]:
-        """Return cache as dictionary."""
-        return self.get(symbol) or {}
-
-
-# ── Global cache instance ────────────────────────────────────────────────────
-_global_cache = AnalysisCache()
-
-
-def get_cache() -> AnalysisCache:
-    """Get the global analysis cache instance."""
-    return _global_cache
-
-
 def create_analysis_cache(symbol: str, timeframe: str) -> Dict[str, Any]:
     """
-    Create and return a new analysis cache for a symbol.
-    Stage 1 uses this to initialize the cache.
+    Create and return a fresh analysis cache for a symbol.
+    All sections match the new Stage 1 Advanced Intelligence Engine.
     """
-    return _global_cache.create(symbol, timeframe)
+    return {
+        # ── Metadata ──────────────────────────────────────────────────────
+        "symbol":        symbol,
+        "timeframe":     timeframe,
+        "timestamp":     datetime.utcnow().isoformat() + "Z",
+        "current_price": 0.0,
+        "support":       0.0,
+        "resistance":    0.0,
+
+        # ── Price Action ──────────────────────────────────────────────────
+        "price_action": {
+            "swing_high":     0.0,
+            "swing_low":      0.0,
+            "structure":      "N/A",
+            "structure_bias": "NEUTRAL",
+            "higher_high":    False,
+            "higher_low":     False,
+            "lower_high":     False,
+            "lower_low":      False,
+            "bos":            "None",
+            "choch":          "None",
+        },
+
+        # ── Smart Money Concepts ──────────────────────────────────────────
+        "smc": {
+            "order_block_bull":    None,
+            "order_block_bear":    None,
+            "fvg_bull":            None,
+            "fvg_bear":            None,
+            "liquidity_zone_high": None,
+            "liquidity_zone_low":  None,
+            "liquidity_sweep":     "None",
+            "breaker_block":       "None",
+            "mitigation_block":    "None",
+        },
+
+        # ── Trend Analysis ────────────────────────────────────────────────
+        "trend": {
+            "direction":      "NEUTRAL",
+            "ema_alignment":  "Mixed",
+            "ema9":           0.0,
+            "ema21":          0.0,
+            "ema50":          0.0,
+            "ema200":         0.0,
+            "above_ema9":     False,
+            "above_ema21":    False,
+            "above_ema50":    False,
+            "above_ema200":   False,
+            "supertrend":     "N/A",
+            "supertrend_val": 0.0,
+            "adx":            0.0,
+            "adx_strength":   "Weak",
+            "plus_di":        0.0,
+            "minus_di":       0.0,
+            "di_bias":        "Neutral",
+            "strength_score": 0.0,
+        },
+
+        # ── Momentum ──────────────────────────────────────────────────────
+        "momentum": {
+            "rsi":            50.0,
+            "rsi_zone":       "Neutral",
+            "macd":           0.0,
+            "macd_signal":    0.0,
+            "macd_hist":      0.0,
+            "macd_trend":     "Neutral",
+            "macd_cross":     "None",
+            "stochrsi_k":     50.0,
+            "stochrsi_d":     50.0,
+            "stochrsi_zone":  "Neutral",
+            "stochrsi_cross": "Neutral",
+            "cci":            0.0,
+            "cci_signal":     "Neutral",
+            "score":          50.0,
+            "label":          "Neutral",
+        },
+
+        # ── Volatility ────────────────────────────────────────────────────
+        "volatility": {
+            "atr":         0.0,
+            "atr_pct":     0.0,
+            "atr_state":   "Stable",
+            "regime":      "Moderate",
+            "bb_upper":    0.0,
+            "bb_middle":   0.0,
+            "bb_lower":    0.0,
+            "bb_width":    0.0,
+            "bb_position": "N/A",
+            "bb_squeeze":  False,
+            "kc_upper":    0.0,
+            "kc_lower":    0.0,
+            "hist_vol":    0.0,
+        },
+
+        # ── Volume ────────────────────────────────────────────────────────
+        "volume": {
+            "current":        0.0,
+            "avg_20":         0.0,
+            "rvol":           1.0,
+            "trend":          "Stable",
+            "spike":          False,
+            "buy_pressure":   50.0,
+            "sell_pressure":  50.0,
+            "vwap":           0.0,
+            "price_vs_vwap":  "N/A",
+        },
+
+        # ── Market Health ─────────────────────────────────────────────────
+        "market_health": {
+            "bull_score":    0.0,
+            "bear_score":    0.0,
+            "neutral_score": 100.0,
+            "overall_score": 0.0,
+            "label":         "Weak",
+        },
+
+        # ── Multi Timeframe ───────────────────────────────────────────────
+        "multi_timeframe": {
+            "timeframes": {
+                "5m":  "Neutral",
+                "15m": "Neutral",
+                "1h":  "Neutral",
+                "4h":  "Neutral",
+                "1D":  "Neutral",
+            },
+            "overall_bias":    "Neutral",
+            "alignment_score": 0.0,
+            "bull_count":      0,
+            "bear_count":      0,
+        },
+
+        # ── AI Confidence ─────────────────────────────────────────────────
+        "confidence": {
+            "score":       0.0,
+            "grade":       "D",
+            "explanation": [],
+        },
+
+        # ── Risk Analysis ─────────────────────────────────────────────────
+        "risk": {
+            "score":         50.0,
+            "category":      "Moderate",
+            "position_size": 5.0,
+            "max_risk_pct":  1.0,
+            "leverage":      "1x–2x",
+        },
+
+        # ── AI Summary ────────────────────────────────────────────────────
+        "summary": {
+            "bias":        "Neutral",
+            "strength":    "Weak",
+            "probability": 0.0,
+            "status":      "Wait for Better Setup",
+            "highlights":  [],
+        },
+    }
+
+
+# ── Global in-memory cache store ─────────────────────────────────────────────
+_store: Dict[str, Dict[str, Any]] = {}
 
 
 def get_analysis_cache(symbol: str) -> Optional[Dict[str, Any]]:
-    """
-    Retrieve the analysis cache for a symbol.
-    Stage 2 uses this to read the analysis results.
-    """
-    return _global_cache.get(symbol)
+    return _store.get(symbol)
+
+
+def save_analysis_cache(symbol: str, cache: Dict[str, Any]):
+    _store[symbol] = cache
 
 
 def clear_analysis_cache(symbol: Optional[str] = None):
-    """Clear the analysis cache."""
-    _global_cache.clear(symbol)
+    if symbol:
+        _store.pop(symbol, None)
+    else:
+        _store.clear()

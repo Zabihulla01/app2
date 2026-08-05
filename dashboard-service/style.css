@@ -121,8 +121,11 @@ body {
 
 /* ── Analysis grids ────────────────────────────────────────────────────── */
 .analysis-grid        { display:grid; gap:12px; margin-bottom:4px; }
+.g1                   { grid-template-columns:1fr; }
+.g2                   { grid-template-columns:repeat(2,1fr); }
 .g3                   { grid-template-columns:repeat(3,1fr); }
 .g4                   { grid-template-columns:repeat(4,1fr); }
+.g5                   { grid-template-columns:repeat(5,1fr); }
 .grp-lbl {
   font-size:12px; font-weight:700; color:var(--dim);
   letter-spacing:.06em; text-transform:uppercase;
@@ -504,7 +507,9 @@ body {
 /* ── Responsive ────────────────────────────────────────────────────────── */
 @media (max-width:900px) {
   .g4 { grid-template-columns:repeat(2,1fr); }
+  .g5 { grid-template-columns:repeat(3,1fr); }
   .g3 { grid-template-columns:repeat(2,1fr); }
+  .g2 { grid-template-columns:repeat(2,1fr); }
 }
 
 @media (max-width:600px) {

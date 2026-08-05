@@ -111,6 +111,7 @@ CURRENCY_CODE   = "USD"
 # Used by _binance_ws_task() in main.py.
 # Binance uses USDT pairs which are equivalent to USD for display purposes.
 # Free public data — no API key required.
+# Tested working from AWS region (ap-south-1 / us-east-1).
 # ─────────────────────────────────────────────────────────────────────────────
 BINANCE_STREAM_MAP = {
     "btcusdt":  "BTC-USD",

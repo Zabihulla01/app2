@@ -104,18 +104,18 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     STAGE 1 — Market Analysis Engine
+     STAGE 1 — Advanced Market Intelligence Engine
 ════════════════════════════════════════════════════════════════════════════ -->
 <div class="stage-panel hidden" id="panel-1">
   <div class="stage-header">
     <div class="stage-badge s1">STAGE 1</div>
-    <div class="stage-title">Market Analysis Engine</div>
+    <div class="stage-title">Advanced Market Intelligence</div>
     <div class="stage-desc">Full technical analysis — no trade recommendation yet</div>
     <div class="stage-sym" id="s1-sym-label">—</div>
   </div>
 
-  <!-- Row 0: live price band -->
-  <div class="analysis-grid g3">
+  <!-- Row 0: Live Price -->
+  <div class="analysis-grid g4">
     <div class="a-card hi">
       <div class="a-lbl">Live Price</div>
       <div class="a-val large" id="s1-price">—</div>
@@ -124,144 +124,293 @@
     <div class="a-card">
       <div class="a-lbl">Volume 24h</div>
       <div class="a-val" id="s1-vol">—</div>
-      <div class="a-sub" id="s1-mcap">MCap: —</div>
+      <div class="a-sub" id="s1-mcap">High/Low: —</div>
     </div>
     <div class="a-card">
       <div class="a-lbl">Market Health</div>
       <div class="a-val" id="s1-health">—</div>
-      <div class="a-sub" id="s1-mode-lbl">Mode: —</div>
+      <div class="a-sub" id="s1-health-scores">Bull — Bear —</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Mode</div>
+      <div class="a-val" id="s1-mode-lbl">—</div>
+      <div class="a-sub" id="s1-status">—</div>
     </div>
   </div>
 
-  <!-- Row 1: Trend -->
-  <div class="grp-lbl">📈 Trend &amp; Market Structure</div>
+  <!-- PRICE ACTION -->
+  <div class="grp-lbl">🕯️ Price Action</div>
   <div class="analysis-grid g4">
-    <div class="a-card">
-      <div class="a-lbl">Trend</div>
-      <div class="a-val" id="s1-trend">—</div>
-      <div class="a-sub">EMA alignment</div>
-    </div>
-    <div class="a-card">
-      <div class="a-lbl">Trend Strength</div>
-      <div class="a-val" id="s1-tstr">—</div>
-      <div class="a-sub" id="s1-tstr-sub">—</div>
-    </div>
     <div class="a-card">
       <div class="a-lbl">Market Structure</div>
-      <div class="a-val" id="s1-struct">—</div>
-      <div class="a-sub">HH/HL or LH/LL</div>
+      <div class="a-val" id="s1-pa-struct">—</div>
+      <div class="a-sub" id="s1-pa-bias">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Structure Break</div>
+      <div class="a-lbl">Swing High / Low</div>
+      <div class="a-val" id="s1-pa-sh">—</div>
+      <div class="a-sub" id="s1-pa-sl">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Break of Structure</div>
       <div class="a-val" id="s1-bos">—</div>
-      <div class="a-sub">BOS / CHoCH</div>
+      <div class="a-sub" id="s1-choch">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">HH/HL — LH/LL</div>
+      <div class="a-val" id="s1-pa-hh">—</div>
+      <div class="a-sub" id="s1-pa-ll">—</div>
     </div>
   </div>
 
-  <!-- Row 2: EMAs -->
-  <div class="grp-lbl">📊 Moving Averages</div>
+  <!-- SMART MONEY CONCEPTS -->
+  <div class="grp-lbl">💰 Smart Money Concepts</div>
+  <div class="analysis-grid g3">
+    <div class="a-card">
+      <div class="a-lbl">Order Blocks</div>
+      <div class="a-val" id="s1-smc-ob">—</div>
+      <div class="a-sub" id="s1-smc-ob-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Fair Value Gap</div>
+      <div class="a-val" id="s1-smc-fvg">—</div>
+      <div class="a-sub" id="s1-smc-fvg-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Liquidity</div>
+      <div class="a-val" id="s1-smc-liq">—</div>
+      <div class="a-sub" id="s1-smc-liq-sub">—</div>
+    </div>
+  </div>
+
+  <!-- TREND ANALYSIS -->
+  <div class="grp-lbl">📈 Trend Analysis</div>
   <div class="analysis-grid g4">
-    <div class="a-card">
-      <div class="a-lbl">EMA 20</div>
-      <div class="a-val" id="s1-ema20">—</div>
-      <div class="a-sub" id="s1-ema20-sub">Short-term trend</div>
-    </div>
-    <div class="a-card">
-      <div class="a-lbl">EMA 50</div>
-      <div class="a-val" id="s1-ema50">—</div>
-      <div class="a-sub" id="s1-ema50-sub">Mid-term trend</div>
-    </div>
-    <div class="a-card">
-      <div class="a-lbl">EMA 200</div>
-      <div class="a-val" id="s1-ema200">—</div>
-      <div class="a-sub" id="s1-ema200-sub">Long-term trend</div>
+    <div class="a-card hi">
+      <div class="a-lbl">Trend</div>
+      <div class="a-val large" id="s1-trend">—</div>
+      <div class="a-sub" id="s1-trend-score">Score: —</div>
     </div>
     <div class="a-card">
       <div class="a-lbl">EMA Alignment</div>
       <div class="a-val" id="s1-ema-align">—</div>
-      <div class="a-sub">20 / 50 / 200 stack</div>
+      <div class="a-sub" id="s1-ema-align-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Supertrend</div>
+      <div class="a-val" id="s1-supertrend">—</div>
+      <div class="a-sub" id="s1-supertrend-val">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">ADX / DI</div>
+      <div class="a-val" id="s1-adx">—</div>
+      <div class="a-sub" id="s1-di">+DI — / -DI —</div>
     </div>
   </div>
 
-  <!-- Row 3: Momentum -->
-  <div class="grp-lbl">⚡ Momentum Indicators</div>
+  <!-- EMAs -->
   <div class="analysis-grid g4">
     <div class="a-card">
-      <div class="a-lbl">RSI</div>
+      <div class="a-lbl">EMA 9</div>
+      <div class="a-val" id="s1-ema9">—</div>
+      <div class="a-sub" id="s1-ema9-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">EMA 21</div>
+      <div class="a-val" id="s1-ema21">—</div>
+      <div class="a-sub" id="s1-ema21-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">EMA 50</div>
+      <div class="a-val" id="s1-ema50">—</div>
+      <div class="a-sub" id="s1-ema50-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">EMA 200</div>
+      <div class="a-val" id="s1-ema200">—</div>
+      <div class="a-sub" id="s1-ema200-sub">—</div>
+    </div>
+  </div>
+
+  <!-- MOMENTUM -->
+  <div class="grp-lbl">⚡ Momentum</div>
+  <div class="analysis-grid g4">
+    <div class="a-card">
+      <div class="a-lbl">RSI (14)</div>
       <div class="a-val" id="s1-rsi">—</div>
       <div class="a-sub" id="s1-rsi-zone">—</div>
     </div>
     <div class="a-card">
       <div class="a-lbl">MACD</div>
       <div class="a-val" id="s1-macd">—</div>
-      <div class="a-sub" id="s1-macd-sub">Signal line cross</div>
+      <div class="a-sub" id="s1-macd-cross">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Bollinger Bands</div>
-      <div class="a-val" id="s1-bb">—</div>
-      <div class="a-sub" id="s1-bb-sub">Band position</div>
+      <div class="a-lbl">Stochastic RSI</div>
+      <div class="a-val" id="s1-srsi">—</div>
+      <div class="a-sub" id="s1-srsi-zone">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Multi-TF Confirm</div>
-      <div class="a-val" id="s1-mtf">—</div>
-      <div class="a-sub" id="s1-mtf-sub">Timeframe alignment</div>
+      <div class="a-lbl">CCI</div>
+      <div class="a-val" id="s1-cci">—</div>
+      <div class="a-sub" id="s1-cci-signal">—</div>
+    </div>
+  </div>
+  <div class="analysis-grid g1">
+    <div class="a-card hi">
+      <div class="a-lbl">Momentum Score</div>
+      <div class="a-val" id="s1-mom-score">—</div>
+      <div class="a-sub" id="s1-mom-label">—</div>
     </div>
   </div>
 
-  <!-- Row 4: Volatility -->
-  <div class="grp-lbl">🌊 Volatility &amp; Range</div>
+  <!-- VOLATILITY -->
+  <div class="grp-lbl">🌊 Volatility</div>
   <div class="analysis-grid g4">
     <div class="a-card">
       <div class="a-lbl">ATR</div>
       <div class="a-val" id="s1-atr">—</div>
-      <div class="a-sub">Average True Range</div>
+      <div class="a-sub" id="s1-atr-state">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Volatility</div>
-      <div class="a-val" id="s1-vol2">—</div>
-      <div class="a-sub" id="s1-vol2-sub">ATR-relative</div>
+      <div class="a-lbl">Volatility Regime</div>
+      <div class="a-val" id="s1-vol-regime">—</div>
+      <div class="a-sub" id="s1-hist-vol">HV: —</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Support</div>
-      <div class="a-val val-up" id="s1-support">—</div>
-      <div class="a-sub">Key demand zone</div>
+      <div class="a-lbl">Bollinger Bands</div>
+      <div class="a-val" id="s1-bb-pos">—</div>
+      <div class="a-sub" id="s1-bb-squeeze">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Resistance</div>
-      <div class="a-val val-down" id="s1-resist">—</div>
-      <div class="a-sub">Key supply zone</div>
+      <div class="a-lbl">Keltner Channel</div>
+      <div class="a-val" id="s1-kc">—</div>
+      <div class="a-sub" id="s1-kc-sub">—</div>
     </div>
   </div>
 
-  <!-- Row 5: Sentiment -->
-  <div class="grp-lbl">💧 Liquidity &amp; Sentiment</div>
+  <!-- VOLUME -->
+  <div class="grp-lbl">📊 Volume Analysis</div>
   <div class="analysis-grid g4">
     <div class="a-card">
-      <div class="a-lbl">Liquidity</div>
-      <div class="a-val" id="s1-liq">—</div>
-      <div class="a-sub" id="s1-liq-sub">Volume vs avg</div>
+      <div class="a-lbl">RVOL</div>
+      <div class="a-val" id="s1-rvol">—</div>
+      <div class="a-sub" id="s1-vol-trend">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Fear &amp; Greed</div>
-      <div class="a-val" id="s1-fg">—</div>
-      <div class="a-sub" id="s1-fg-sub">Market sentiment</div>
+      <div class="a-lbl">Buy Pressure</div>
+      <div class="a-val val-up" id="s1-buy-press">—</div>
+      <div class="a-sub" id="s1-sell-press">Sell: —</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Risk Score</div>
-      <div class="a-val" id="s1-risk">—</div>
-      <div class="a-sub" id="s1-risk-sub">0 = low  100 = high</div>
+      <div class="a-lbl">VWAP</div>
+      <div class="a-val" id="s1-vwap">—</div>
+      <div class="a-sub" id="s1-vwap-sub">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Confidence Score</div>
-      <div class="a-val" id="s1-conf">—</div>
-      <div class="a-sub" id="s1-conf-sub">Signal confidence</div>
+      <div class="a-lbl">Volume Spike</div>
+      <div class="a-val" id="s1-vol-spike">—</div>
+      <div class="a-sub">vs 20-bar avg</div>
     </div>
   </div>
 
-  <!-- Analysis Summary -->
+  <!-- MULTI TIMEFRAME -->
+  <div class="grp-lbl">🕐 Multi Timeframe</div>
+  <div class="analysis-grid g5">
+    <div class="a-card">
+      <div class="a-lbl">5m</div>
+      <div class="a-val" id="s1-mtf-5m">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">15m</div>
+      <div class="a-val" id="s1-mtf-15m">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">1h</div>
+      <div class="a-val" id="s1-mtf-1h">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">4h</div>
+      <div class="a-val" id="s1-mtf-4h">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">1D</div>
+      <div class="a-val" id="s1-mtf-1d">—</div>
+    </div>
+  </div>
+  <div class="analysis-grid g2">
+    <div class="a-card hi">
+      <div class="a-lbl">MTF Overall Bias</div>
+      <div class="a-val" id="s1-mtf-bias">—</div>
+      <div class="a-sub" id="s1-mtf-align">Alignment: —</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Support / Resistance</div>
+      <div class="a-val val-up" id="s1-support">—</div>
+      <div class="a-sub val-down" id="s1-resist">—</div>
+    </div>
+  </div>
+
+  <!-- AI CONFIDENCE -->
+  <div class="grp-lbl">🤖 AI Confidence</div>
+  <div class="analysis-grid g3">
+    <div class="a-card hi">
+      <div class="a-lbl">Confidence</div>
+      <div class="a-val large" id="s1-conf">—</div>
+      <div class="a-sub" id="s1-conf-grade">Grade: —</div>
+    </div>
+    <div class="a-card" style="grid-column: span 2">
+      <div class="a-lbl">Why this confidence?</div>
+      <div class="a-val" id="s1-conf-explain" style="font-size:0.85rem;line-height:1.5">—</div>
+    </div>
+  </div>
+
+  <!-- RISK ANALYSIS -->
+  <div class="grp-lbl">⚠️ Risk Analysis</div>
+  <div class="analysis-grid g4">
+    <div class="a-card hi">
+      <div class="a-lbl">Risk Score</div>
+      <div class="a-val large" id="s1-risk">—</div>
+      <div class="a-sub" id="s1-risk-cat">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Position Size</div>
+      <div class="a-val" id="s1-pos-size">—</div>
+      <div class="a-sub">% of capital</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Max Risk %</div>
+      <div class="a-val" id="s1-max-risk">—</div>
+      <div class="a-sub">per trade</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Leverage</div>
+      <div class="a-val" id="s1-leverage">—</div>
+      <div class="a-sub">suggested</div>
+    </div>
+  </div>
+
+  <!-- AI SUMMARY -->
   <div class="summary-box">
-    <div class="summary-title">📋 Analysis Summary</div>
-    <div class="summary-grid" id="s1-summary-grid"></div>
+    <div class="summary-title">🧠 AI Summary</div>
+    <div class="analysis-grid g3" style="margin-bottom:1rem">
+      <div class="a-card hi">
+        <div class="a-lbl">Market Bias</div>
+        <div class="a-val large" id="s1-bias">—</div>
+        <div class="a-sub" id="s1-strength">Strength: —</div>
+      </div>
+      <div class="a-card hi">
+        <div class="a-lbl">Probability</div>
+        <div class="a-val large" id="s1-prob">—</div>
+        <div class="a-sub">estimated</div>
+      </div>
+      <div class="a-card hi">
+        <div class="a-lbl">Recommendation</div>
+        <div class="a-val" id="s1-rec-status" style="font-size:0.9rem">—</div>
+        <div class="a-sub">Stage 2 readiness</div>
+      </div>
+    </div>
+    <div id="s1-highlights" style="margin-top:0.5rem;font-size:0.85rem;color:#94a3b8;line-height:1.8"></div>
     <div class="summary-note">
       ⚠️ Stage 1 outputs analysis only — no trade recommendation is made at this stage.
     </div>
