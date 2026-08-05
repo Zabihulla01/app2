@@ -105,3 +105,22 @@ COINGECKO_RATE_WAIT = 1.5     # seconds between requests (free tier: 30 req/min)
 # ── Currency display ──────────────────────────────────────────────────────────
 CURRENCY_SYMBOL = "$"
 CURRENCY_CODE   = "USD"
+
+# ── Binance WebSocket stream mapping ─────────────────────────────────────────
+# Maps Binance miniTicker stream name → internal symbol (yfinance format).
+# Used by _binance_ws_task() in main.py.
+# Binance uses USDT pairs which are equivalent to USD for display purposes.
+# Free public data — no API key required.
+# ─────────────────────────────────────────────────────────────────────────────
+BINANCE_STREAM_MAP = {
+    "btcusdt":  "BTC-USD",
+    "ethusdt":  "ETH-USD",
+    "solusdt":  "SOL-USD",
+    "bnbusdt":  "BNB-USD",
+    "xrpusdt":  "XRP-USD",
+    "adausdt":  "ADA-USD",
+    "dogeusdt": "DOGE-USD",
+    "avaxusdt": "AVAX-USD",
+    "dotusdt":  "DOT-USD",
+    "linkusdt": "LINK-USD",
+}

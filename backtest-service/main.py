@@ -85,12 +85,17 @@ from strategy import rsi_signal
 from fastapi.middleware.cors import CORSMiddleware
 from concurrent.futures import ThreadPoolExecutor
 import time
+import asyncio
+import json
+import websockets
+from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.websockets import WebSocketState
 
-# ── yfinance MultiIndex column fix ───────────────────────────────────────────
-# yfinance ≥0.2.x returns MultiIndex columns like ('Close','INFY.NS').
-# This helper flattens them to simple strings so all df['Close'] access works.
+# ── DataFrame column fix ─────────────────────────────────────────────────────
+# yfinance (used as fallback for 4h/15m data) may return MultiIndex columns.
+# This helper flattens them to single-level so df['Close'] always works.
 def _flatten(df):
-    """Flatten MultiIndex columns returned by yfinance to single-level."""
+    """Flatten MultiIndex columns to single-level strings."""
     import pandas as pd
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
@@ -102,6 +107,98 @@ CACHE_SECONDS = SCANNER_CACHE_SECONDS   # from crypto_config
 
 
 app = FastAPI()
+
+# ── Binance WebSocket Live Price Store ───────────────────────────────────────
+# Real-time prices from Kraken public WebSocket (no API key required).
+# Free, legal, sub-second updates — same price as TradingView.
+# Note: Binance WS is geo-blocked on some AWS regions; Kraken works globally.
+# Shape: { "BTC-USD": {"price": 65000.0, "ts": "...", "source": "kraken"}, ... }
+_binance_prices: dict = {}
+_binance_ws_clients: list = []   # connected dashboard WebSocket clients
+
+# Kraken pair name → internal symbol
+# Kraken uses XBT for Bitcoin and XDG for Dogecoin
+KRAKEN_PAIR_MAP = {
+    "XBT/USD":  "BTC-USD",
+    "ETH/USD":  "ETH-USD",
+    "SOL/USD":  "SOL-USD",
+    "BNB/USD":  "BNB-USD",
+    "XRP/USD":  "XRP-USD",
+    "ADA/USD":  "ADA-USD",
+    "XDG/USD":  "DOGE-USD",
+    "AVAX/USD": "AVAX-USD",
+    "DOT/USD":  "DOT-USD",
+    "LINK/USD": "LINK-USD",
+}
+
+async def _binance_ws_task():
+    """
+    Background task: connects to Kraken public WebSocket, subscribes to
+    ticker for all configured crypto pairs, stores latest prices in
+    _binance_prices dict (reused name for compatibility), and pushes
+    real-time updates to all connected dashboard clients.
+
+    Kraken is used because Binance WS is geo-blocked on some AWS regions.
+    Both are free, public market data — no API key required.
+    Reconnects automatically on disconnect or error.
+    """
+    uri = "wss://ws.kraken.com"
+    subscribe_msg = {
+        "event": "subscribe",
+        "pair":  list(KRAKEN_PAIR_MAP.keys()),
+        "subscription": {"name": "ticker"},
+    }
+
+    while True:
+        try:
+            logger.info("Kraken WS: connecting — %d pairs", len(KRAKEN_PAIR_MAP))
+            async with websockets.connect(uri, ping_interval=20, ping_timeout=10) as ws:
+                await ws.send(json.dumps(subscribe_msg))
+                logger.info("Kraken WS: subscribed to %d pairs", len(KRAKEN_PAIR_MAP))
+                async for raw in ws:
+                    try:
+                        msg = json.loads(raw)
+                        # Kraken ticker format: [channelID, {ticker_data}, "ticker", "XBT/USD"]
+                        if (isinstance(msg, list) and len(msg) == 4
+                                and msg[2] == "ticker"):
+                            pair   = msg[3]          # e.g. "XBT/USD"
+                            ticker = msg[1]
+                            symbol = KRAKEN_PAIR_MAP.get(pair)
+                            if symbol and "c" in ticker:
+                                price = float(ticker["c"][0])   # last trade price
+                                ts    = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+                                _binance_prices[symbol] = {
+                                    "price":  price,
+                                    "ts":     ts,
+                                    "pair":   pair,
+                                    "source": "kraken",
+                                }
+                                # Push real-time update to all connected dashboard clients
+                                if _binance_ws_clients:
+                                    payload = json.dumps({"LivePrices": _binance_prices})
+                                    dead = []
+                                    for client in list(_binance_ws_clients):
+                                        try:
+                                            if client.client_state == WebSocketState.CONNECTED:
+                                                await client.send_text(payload)
+                                            else:
+                                                dead.append(client)
+                                        except Exception:
+                                            dead.append(client)
+                                    for d in dead:
+                                        if d in _binance_ws_clients:
+                                            _binance_ws_clients.remove(d)
+                    except Exception as parse_err:
+                        logger.warning("Kraken WS parse error: %s", parse_err)
+        except Exception as conn_err:
+            logger.warning("Kraken WS disconnected: %s — reconnecting in 5s", conn_err)
+            await asyncio.sleep(5)
+
+@app.on_event("startup")
+async def startup_event():
+    """Start Kraken WebSocket background task on app startup."""
+    asyncio.create_task(_binance_ws_task())
+    logger.info("Kraken WebSocket background task started — %d pairs", len(KRAKEN_PAIR_MAP))
 
 # Crypto symbols to scan — edit crypto_config.py to add more coins
 SCAN_STOCKS = SCAN_SYMBOLS   # ["BTC-USD", "ETH-USD", ...]
@@ -139,9 +236,9 @@ BACKTEST_RUNS = Counter(
 
 YF_REQUESTS = Counter(
 
-    "yf_requests_total",
+    "crypto_data_requests_total",
 
-    "Total yfinance requests"
+    "Total crypto data fetch requests"
 
 )
 
@@ -171,9 +268,9 @@ RSI_PF = Gauge(
 
 YF_ERRORS = Counter(
 
-    "yf_errors_total",
+    "crypto_data_errors_total",
 
-    "Total yfinance failures"
+    "Total crypto data fetch failures"
 
 )
 
@@ -218,7 +315,7 @@ def backtest(
 
     try:
 
-        # Fetch OHLCV from CoinGecko (primary) or yfinance (fallback)
+        # Fetch OHLCV from CoinGecko (primary) with yfinance fallback for 4h/15m
         df = fetch_ohlcv(stock, timeframe=BACKTEST_INTERVAL)
 
         if df.empty:
@@ -1318,20 +1415,71 @@ def rank(stock:str):
     }
 
 
-# ── GET /live_prices – live BTC/ETH price, 24h change, volume, market cap ───
+# ── GET /live_prices ──────────────────────────────────────────────────────────
 @app.get("/live_prices")
 def live_prices():
     """
-    Return live price data for all configured crypto coins via CoinGecko.
-    Response includes: price, change_24h, volume_24h, market_cap, high_24h, low_24h.
+    Return live price data for all configured crypto coins.
+
+    Price source priority:
+      1. Binance WebSocket (real-time, sub-second) — same price as TradingView
+      2. CoinGecko REST API (fallback, ~60-120s delay)
+
+    Market data (market_cap, volume_24h, change_24h, high_24h, low_24h)
+    always comes from CoinGecko since Binance miniTicker doesn't provide it.
     """
     coin_ids = list(SYMBOL_TO_COINGECKO.values())
-    data = fetch_live_prices(coin_ids)
-    # Re-key by yfinance symbol for frontend convenience
-    result = {}
+    cg_data  = fetch_live_prices(coin_ids)
+    result   = {}
+
     for symbol, cg_id in SYMBOL_TO_COINGECKO.items():
-        result[symbol] = data.get(cg_id, {})
+        cg  = cg_data.get(cg_id, {})
+        row = dict(cg)   # copy CoinGecko data (market cap, volume, 24h change etc.)
+
+        # Override price with Binance real-time if available
+        binance = _binance_prices.get(symbol)
+        if binance and binance.get("price"):
+            row["price"]  = binance["price"]
+            row["source"] = "binance"
+            row["ts"]     = binance["ts"]
+        else:
+            row["source"] = "coingecko"
+
+        result[symbol] = row
+
     return {"LivePrices": result}
+
+
+# ── WebSocket /ws_price — real-time price push from Binance ──────────────────
+@app.websocket("/ws_price")
+async def ws_price(websocket: WebSocket):
+    """
+    WebSocket endpoint: pushes real-time Binance prices to the dashboard.
+    Dashboard connects once and receives sub-second price updates.
+
+    Message format:
+      { "LivePrices": { "BTC-USD": { "price": 65000.0, "ts": "...", "source": "binance" },
+                        "ETH-USD": { "price": 3200.0,  "ts": "...", "source": "binance" } } }
+    """
+    await websocket.accept()
+    _binance_ws_clients.append(websocket)
+    logger.info("Dashboard WS client connected (total: %d)", len(_binance_ws_clients))
+
+    # Send current cached prices immediately on connect (no waiting for next tick)
+    if _binance_prices:
+        await websocket.send_text(json.dumps({"LivePrices": _binance_prices}))
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        if websocket in _binance_ws_clients:
+            _binance_ws_clients.remove(websocket)
+        logger.info("Dashboard WS client disconnected (total: %d)", len(_binance_ws_clients))
 
 
 # ── GET /coins – list of supported coins ────────────────────────────────────
@@ -1917,10 +2065,8 @@ def open_trades():
 @app.get("/monitor")
 def monitor():
     """
-    For each OPEN prediction, fetch the latest price via yfinance and
-    resolve WIN / LOSS / EXPIRED.  Returns the updated prediction list.
-
-    This is the ONLY endpoint that calls yfinance for status resolution.
+    For each OPEN prediction, fetch the latest price via CoinGecko/fetch_ohlcv
+    and resolve WIN / LOSS / EXPIRED.  Returns the updated prediction list.
     """
     trades = get_open_trades()
     resolved = []
@@ -1955,7 +2101,6 @@ def dashboard_stats():
     """
     Aggregate accuracy statistics for the Analytics Dashboard.
     Returns Total, Wins, Losses, Open, Expired and Accuracy %.
-    Delegates entirely to calculate_accuracy() – no yfinance calls.
     """
     stats = calculate_accuracy()
     return {

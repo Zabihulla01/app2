@@ -627,3 +627,192 @@ body {
   text-align: center;
 }
 .dd-no-match strong { color: var(--text); }
+
+/* ── Kraken WebSocket live price flash animation ────────────────────────── */
+@keyframes wsPulse {
+    0%   { color: inherit; }
+    20%  { color: #00e5ff; text-shadow: 0 0 8px #00e5ff88; }
+    100% { color: inherit; text-shadow: none; }
+}
+.ws-flash {
+    animation: wsPulse 0.6s ease-out forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SELL / STRONG SELL — Signal Tag (Stage 2 banner)
+═══════════════════════════════════════════════════════════════════════════ */
+.dec-signal-tag {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+.sig-strong-buy  { background: rgba(0,230,118,.18); color: #00e676; border: 1px solid #00e67666; }
+.sig-buy         { background: rgba(0,200,83,.15);  color: #00c853; border: 1px solid #00c85344; }
+.sig-sell        { background: rgba(255,82,82,.15); color: #ff5252; border: 1px solid #ff525244; }
+.sig-strong-sell { background: rgba(213,0,0,.2);    color: #ff1744; border: 1px solid #ff174466;
+                   box-shadow: 0 0 10px rgba(255,23,68,.25); }
+
+/* Stage 5 badge */
+.stage-badge.s5 {
+    background: linear-gradient(135deg, #7c4dff, #651fff);
+    color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STAGE 4 — Live P&L Bar
+═══════════════════════════════════════════════════════════════════════════ */
+.pnl-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin: 0 0 18px 0;
+}
+.pnl-bar-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    min-width: 56px;
+}
+.pnl-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.pnl-bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    transition: width 0.4s ease, background 0.3s ease;
+    background: var(--green);
+}
+.pnl-bar-value {
+    font-size: 15px;
+    font-weight: 800;
+    min-width: 64px;
+    text-align: right;
+}
+.pnl-bar-source {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+@keyframes livePulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.3; }
+}
+.pnl-live-pulse { animation: livePulse 1.4s ease-in-out infinite; color: var(--green); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STAGE 4 — Top Opportunities Grid
+═══════════════════════════════════════════════════════════════════════════ */
+.opp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.opp-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 10px;
+    cursor: pointer;
+    transition: border-color .2s, transform .15s;
+    text-align: center;
+}
+.opp-card:hover { border-color: var(--cyan); transform: translateY(-2px); }
+.opp-sym   { font-size: 13px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+.opp-sig   { font-size: 11px; font-weight: 700; letter-spacing: .5px; margin-bottom: 4px; }
+.opp-price { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.opp-conf  { font-size: 11px; font-weight: 700; }
+.opp-loading { color: var(--muted); font-size: 13px; padding: 16px 0; grid-column: 1/-1; text-align:center; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STAGE 5 — Accuracy Dashboard
+═══════════════════════════════════════════════════════════════════════════ */
+/* 2-col grid for mode breakdown */
+.analysis-grid.g2 { grid-template-columns: 1fr 1fr; }
+
+/* Win/Loss bar */
+.acc-bar-wrap { margin: 0 0 22px 0; }
+.acc-bar-track {
+    display: flex;
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--border);
+    margin-bottom: 6px;
+}
+.acc-bar-win  { background: var(--green); transition: width .5s ease; }
+.acc-bar-loss { background: var(--red);   transition: width .5s ease; }
+.acc-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .5px;
+}
+.acc-bar-lbl-win  { color: var(--green); }
+.acc-bar-lbl-loss { color: var(--red); }
+
+/* Trend sparkline dots */
+.acc-trend-wrap { margin-bottom: 22px; }
+.acc-trend-empty { color: var(--muted); font-size: 13px; padding: 16px 0; }
+.trend-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.trend-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    cursor: default;
+}
+.trend-dot.win  { background: var(--green); box-shadow: 0 0 4px rgba(0,230,118,.4); }
+.trend-dot.loss { background: var(--red);   box-shadow: 0 0 4px rgba(255,82,82,.4); }
+.trend-summary  { font-size: 13px; color: var(--muted); }
+.trend-summary span { font-weight: 800; margin-left: 4px; }
+
+/* Accuracy table */
+.acc-table-wrap { overflow-x: auto; margin-bottom: 18px; }
+.acc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.acc-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+}
+.acc-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+    color: var(--text);
+}
+.acc-table tr:hover td { background: rgba(255,255,255,.03); }
+.acc-win  { color: var(--green); font-weight: 700; }
+.acc-loss { color: var(--red);   font-weight: 700; }
+.acc-empty { color: var(--muted); text-align: center; padding: 20px !important; }

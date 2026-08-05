@@ -20,6 +20,153 @@ let lockedPosition = null;
 let s2Data         = null;   // Stage 2 recommendation response
 let s4AutoTimer    = null;
 
+// ── In-flight guards — prevent stacked / duplicate API calls ─────────────────
+let _s1Loading    = false;   // loadStage1()      — analyzing a coin
+let _s4Refreshing = false;   // refreshProtection() — Stage 4 protect call
+
+// ── Binance WebSocket – real-time live price ──────────────────────────────────
+let _binanceWs         = null;   // WebSocket instance
+let _binanceReconnectT = null;   // reconnect timer
+
+/**
+ * Connect to /ws_price WebSocket endpoint (backed by Binance).
+ * Receives real-time price pushes for BTC, ETH, SOL, BNB, XRP and more.
+ * Sub-second latency. Auto-reconnects on disconnect.
+ */
+function startBinanceWs() {
+    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsHost  = window.location.protocol === "file:"
+        ? "localhost:8008"
+        : window.location.host;
+    const wsUrl   = `${wsProto}//${wsHost}/api/ws_price`;
+
+    // Avoid duplicate connections
+    if (_binanceWs && (_binanceWs.readyState === WebSocket.OPEN ||
+                       _binanceWs.readyState === WebSocket.CONNECTING)) return;
+
+    try {
+        _binanceWs = new WebSocket(wsUrl);
+
+        _binanceWs.onopen = () => {
+            console.log("[BinanceWS] Connected →", wsUrl);
+            if (_binanceReconnectT) { clearTimeout(_binanceReconnectT); _binanceReconnectT = null; }
+        };
+
+        _binanceWs.onmessage = (evt) => {
+            try {
+                const data = JSON.parse(evt.data);
+                if (data && data.LivePrices) {
+                    updateLivePriceBand(data.LivePrices);
+                }
+            } catch (e) { /* ignore parse errors */ }
+        };
+
+        _binanceWs.onerror = (err) => {
+            console.warn("[BinanceWS] Error:", err);
+        };
+
+        _binanceWs.onclose = () => {
+            console.warn("[BinanceWS] Disconnected — reconnecting in 5s");
+            _binanceWs = null;
+            _binanceReconnectT = setTimeout(startBinanceWs, 5000);
+        };
+    } catch (e) {
+        console.warn("[BinanceWS] Failed to connect:", e);
+        _binanceReconnectT = setTimeout(startBinanceWs, 5000);
+    }
+}
+
+/**
+ * Update live prices from WebSocket — called on every Kraken tick.
+ * 1. Updates Stage 1 price display with flash animation.
+ * 2. Updates Stage 4 Live P&L bar in real-time without a full API call.
+ */
+function updateLivePriceBand(prices) {
+    const sym  = currentSymbol || "BTC-USD";
+    const coin = prices[sym];
+    if (!coin || !coin.price) return;
+
+    const livePrice = parseFloat(coin.price);
+
+    // ── Stage 1 price flash ───────────────────────────────────────────────
+    const priceEl = document.getElementById("s1-price");
+    if (priceEl) {
+        const formatted = fmtPrice(livePrice);
+        if (priceEl.textContent !== formatted) {
+            priceEl.textContent = formatted;
+            priceEl.classList.remove("ws-flash");
+            void priceEl.offsetWidth;
+            priceEl.classList.add("ws-flash");
+        }
+    }
+
+    // ── Stage 4 real-time P&L update ─────────────────────────────────────
+    // Only update if Stage 4 is visible and we have a locked position
+    const s4panel = document.getElementById("panel-4");
+    if (lockedPosition && s4panel && !s4panel.classList.contains("hidden")) {
+        const entry     = parseFloat(lockedPosition.entry) || 0;
+        const direction = (lockedPosition.direction || "LONG").toUpperCase();
+
+        if (entry > 0) {
+            // P&L % calculation
+            const pnlPct = direction === "SHORT"
+                ? ((entry - livePrice) / entry) * 100
+                : ((livePrice - entry) / entry) * 100;
+            const pnlUsd = direction === "SHORT"
+                ? (entry - livePrice)
+                : (livePrice - entry);
+
+            // Update price display
+            const priceS4 = document.getElementById("s4-price");
+            if (priceS4) {
+                priceS4.textContent = fmtPrice(livePrice);
+                priceS4.classList.remove("ws-flash");
+                void priceS4.offsetWidth;
+                priceS4.classList.add("ws-flash");
+            }
+
+            // Update P&L value
+            const pnlEl = document.getElementById("s4-pnl");
+            if (pnlEl) {
+                pnlEl.textContent = fmtPct(pnlPct);
+                pnlEl.className   = pnlPct >= 0 ? "a-val val-up" : "a-val val-down";
+            }
+
+            // Update P&L USD sub
+            const pnlUsdEl = document.getElementById("s4-pnl-usd");
+            if (pnlUsdEl) {
+                const sign = pnlUsd >= 0 ? "+" : "";
+                pnlUsdEl.textContent = `${sign}$${Math.abs(pnlUsd).toFixed(2)}`;
+                pnlUsdEl.className   = pnlUsd >= 0 ? "a-sub val-up" : "a-sub val-down";
+            }
+
+            // Update P&L bar
+            const barFill  = document.getElementById("s4-pnl-bar-fill");
+            const barValue = document.getElementById("s4-pnl-bar-value");
+            if (barFill && barValue) {
+                const clamp  = Math.min(Math.abs(pnlPct), 10);   // max 10% visual
+                const width  = (clamp / 10) * 100;
+                barFill.style.width      = width + "%";
+                barFill.style.background = pnlPct >= 0 ? "var(--green)" : "var(--red)";
+                barValue.textContent     = fmtPct(pnlPct);
+                barValue.className       = "pnl-bar-value " + (pnlPct >= 0 ? "val-up" : "val-down");
+            }
+
+            // Source indicator pulse
+            const srcEl = document.getElementById("s4-pnl-source");
+            if (srcEl) {
+                srcEl.textContent = "● live";
+                srcEl.className   = "pnl-bar-source pnl-live-pulse";
+            }
+        }
+    }
+}
+
+// Start Binance WebSocket when page loads
+document.addEventListener("DOMContentLoaded", () => {
+    startBinanceWs();
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast notifications
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,26 +293,27 @@ function actionBannerClass(action) {
 const STAGE_LABELS = [
     "STAGE 0 — CRYPTO SEARCH",
     "STAGE 1 — MARKET ANALYSIS",
-    "STAGE 2 — TRADE RECOMMENDATION",
+    "STAGE 2 — TRADE SIGNAL",
     "STAGE 3 — POSITION LOCKED",
-    "STAGE 4 — AI PROTECTION",
+    "STAGE 4 — REAL-TIME MONITOR",
+    "ACCURACY DASHBOARD",
 ];
 
 function goToStage(n) {
-    // Guard: stages 1-4 require a symbol to have been analyzed
-    if (n >= 1 && !currentSymbol) {
+    // Stage 5 (Accuracy) is always accessible — no symbol required
+    if (n >= 1 && n <= 4 && !currentSymbol) {
         showToast("Enter a symbol in Stage 0 first.", "warning");
         const inp = document.getElementById("s0-manual-input");
         if (inp) { inp.focus(); inp.scrollIntoView({ behavior: "smooth", block: "center" }); }
         return;
     }
-    // Guard: stages 3-4 require a locked position
     if ((n === 3 || n === 4) && !lockedPosition) {
         showToast("Lock a position in Stage 2 first.", "warning");
         return;
     }
 
-    for (let i = 0; i <= 4; i++) {
+    const maxStage = 5;
+    for (let i = 0; i <= maxStage; i++) {
         const p = document.getElementById(`panel-${i}`);
         if (p) p.classList.add("hidden");
         const s = document.getElementById(`pipe-${i}`);
@@ -180,9 +328,10 @@ function goToStage(n) {
     const cur = document.getElementById(`pipe-${n}`);
     if (cur) cur.classList.add("active");
     const badge = document.getElementById("header-stage-badge");
-    if (badge) badge.textContent = STAGE_LABELS[n];
+    if (badge) badge.textContent = STAGE_LABELS[n] || `STAGE ${n}`;
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (n === 4 && lockedPosition) refreshProtection();
+    if (n === 5) loadAccuracyDashboard();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -577,6 +726,13 @@ async function manualSelectSymbol() {
 // =============================================================================
 
 async function loadStage1(symbol, mode) {
+    // ── In-flight guard — ignore if a previous analysis is still running ─
+    if (_s1Loading) {
+        showToast("⏳ Analysis already in progress…", "warning");
+        return;
+    }
+    _s1Loading = true;
+
     // Show spinner on analyze button
     const btnText    = document.getElementById("analyze-btn-text");
     const btnSpinner = document.getElementById("analyze-btn-spinner");
@@ -619,6 +775,7 @@ async function loadStage1(symbol, mode) {
         showToast("❌ Analysis failed. Check that the API service is running.", "error");
 
     } finally {
+        _s1Loading = false;
         if (btnText)    btnText.style.display    = "";
         if (btnSpinner) btnSpinner.style.display = "none";
         if (analyzeBtn) analyzeBtn.disabled      = false;
@@ -739,18 +896,47 @@ function populateStage1(d) {
 function populateStage2(d) {
     s2Data = d;
 
-    const dec  = d.Decision || "NO TRADE";
-    const conf = parseFloat(d.Confidence) || 0;
+    const dec    = d.Decision  || "NO TRADE";
+    const signal = d.Signal    || "";
+    const conf   = parseFloat(d.Confidence) || 0;
 
     set("s2-sym-label", d.Symbol, "val-cyan");
 
+    // ── Decision banner class ────────────────────────────────────────────
     const banner = document.getElementById("s2-decision-banner");
     if (banner) banner.className = "decision-banner " + decisionBannerClass(dec);
+
+    // ── Signal tag — STRONG BUY / BUY / SELL / STRONG SELL ───────────────
+    const tagEl = document.getElementById("s2-signal-tag");
+    if (tagEl) {
+        const sig = signal.toUpperCase();
+        if (sig === "STRONG BUY") {
+            tagEl.textContent = "⚡ STRONG BUY";
+            tagEl.className   = "dec-signal-tag sig-strong-buy";
+            tagEl.style.display = "";
+        } else if (sig === "BUY") {
+            tagEl.textContent = "▲ BUY";
+            tagEl.className   = "dec-signal-tag sig-buy";
+            tagEl.style.display = "";
+        } else if (sig === "STRONG SELL") {
+            tagEl.textContent = "⚡ STRONG SELL";
+            tagEl.className   = "dec-signal-tag sig-strong-sell";
+            tagEl.style.display = "";
+        } else if (sig === "SELL") {
+            tagEl.textContent = "▼ SELL";
+            tagEl.className   = "dec-signal-tag sig-sell";
+            tagEl.style.display = "";
+        } else {
+            tagEl.style.display = "none";
+        }
+    }
 
     set("s2-action",   dec);
     set("s2-conf-pct", conf > 0 ? `Confidence: ${fmt(conf,0)}%` : "");
     set("s2-reason",   d.Reason || "");
 
+    // Actionable = LONG or SHORT (even when signal is SELL/STRONG SELL the
+    // decision might still be SHORT which is a valid trade direction)
     const isActionable = dec === "LONG" || dec === "SHORT";
     const setupWrap = document.getElementById("s2-setup-wrap");
     const waitWrap  = document.getElementById("s2-wait-wrap");
@@ -761,19 +947,22 @@ function populateStage2(d) {
         if (waitWrap)  waitWrap.style.display  = "none";
         if (ctaWrap)   ctaWrap.style.display   = "";
 
-        set("s2-dir",      dec === "LONG" ? "LONG ▲" : "SHORT ▼", dec==="LONG"?"val-up":"val-down");
+        const isShort = dec === "SHORT";
+        set("s2-dir",      isShort ? "SHORT ▼" : "LONG ▲", isShort ? "val-down" : "val-up");
         set("s2-mode-lbl", d.Mode || "N/A");
-        set("s2-entry",    fmtPrice(d.Entry),   "val-cyan");
-        set("s2-sl",       fmtPrice(d.StopLoss),"val-down");
+        set("s2-entry",    fmtPrice(d.Entry),    "val-cyan");
+        set("s2-sl",       fmtPrice(d.StopLoss), "val-down");
         set("s2-risk-amt", d.Risk ? `Risk: ${fmtPrice(d.Risk)}` : "Risk: N/A");
-        set("s2-tp1",      fmtPrice(d.TP1), "val-up");
-        set("s2-tp2",      fmtPrice(d.TP2), "val-up");
-        set("s2-tp3",      fmtPrice(d.TP3), "val-up");
-        set("s2-rr",       d.RiskReward ? `1 : ${fmt(d.RiskReward,2)}` : "N/A", rrColor(d.RiskReward));
 
-        const reasons = (d.Reason || "").split("|").map(r=>r.trim()).filter(Boolean);
+        // For SHORT trades TP labels show "Target" not "profit"
+        set("s2-tp1", fmtPrice(d.TP1), isShort ? "val-down" : "val-up");
+        set("s2-tp2", fmtPrice(d.TP2), isShort ? "val-down" : "val-up");
+        set("s2-tp3", fmtPrice(d.TP3), isShort ? "val-down" : "val-up");
+        set("s2-rr",  d.RiskReward ? `1 : ${fmt(d.RiskReward,2)}` : "N/A", rrColor(d.RiskReward));
+
+        const reasons = (d.Reason || "").split("|").map(r => r.trim()).filter(Boolean);
         const why = document.getElementById("s2-why-body");
-        if (why) why.innerHTML = reasons.map(r=>`<div class="why-item">• ${r}</div>`).join("");
+        if (why) why.innerHTML = reasons.map(r => `<div class="why-item">• ${r}</div>`).join("");
 
     } else {
         if (setupWrap) setupWrap.style.display = "none";
@@ -859,16 +1048,27 @@ async function refreshProtection() {
         showToast("No locked position. Complete Stages 0-3 first.", "warning");
         return;
     }
+
+    // ── In-flight guard — skip this tick if previous call still running ──
+    if (_s4Refreshing) {
+        console.warn("[Stage4] Skipped refresh — previous request still in-flight");
+        return;
+    }
+    _s4Refreshing = true;
+
     const btn = document.getElementById("s4-refresh-btn");
     if (btn) { btn.disabled = true; btn.textContent = "⏳ Refreshing…"; }
 
     const sym  = lockedPosition.symbol || currentSymbol;
-    const data = await apiFetch(`/stage4/protect/${sym}`);
-
-    if (btn) { btn.disabled = false; btn.textContent = "🔄 Refresh Now"; }
-    if (!data) return;
-
-    populateStage4(data);
+    try {
+        const data = await apiFetch(`/stage4/protect/${sym}`);
+        if (data) populateStage4(data);
+        // Also refresh top opportunities in background
+        loadTopOpportunities();
+    } finally {
+        _s4Refreshing = false;
+        if (btn) { btn.disabled = false; btn.textContent = "🔄 Refresh Now"; }
+    }
 }
 
 function populateStage4(data) {
@@ -962,9 +1162,173 @@ async function closeTrade() {
     goToStage(0);
 }
 
+// =============================================================================
+// STAGE 4 — Top Opportunities
+// =============================================================================
+
+async function loadTopOpportunities() {
+    const container = document.getElementById("s4-opportunities");
+    if (!container) return;
+    container.innerHTML = `<div class="opp-loading">🔍 Scanning market…</div>`;
+
+    const data = await apiFetch(`/stage0/scanner?mode=${currentMode || "SWING"}`);
+    if (!data || !data.Picks || !data.Picks.length) {
+        container.innerHTML = `<div class="opp-loading">No opportunities found right now.</div>`;
+        return;
+    }
+
+    // Show top 5, exclude the currently locked symbol
+    const lockedSym = (lockedPosition?.symbol || "").toUpperCase();
+    const picks = data.Picks
+        .filter(p => p.Symbol !== lockedSym)
+        .slice(0, 5);
+
+    container.innerHTML = picks.map(p => {
+        const sig    = (p.Signal || "").toUpperCase();
+        const sigCls = sig === "BUY" || sig === "STRONG BUY"  ? "val-up"
+                     : sig === "SELL"|| sig === "STRONG SELL" ? "val-down"
+                     : "val-neutral";
+        const confCls = confColor(p.Confidence);
+        return `
+        <div class="opp-card" onclick="quickSwitchSymbol('${p.Symbol}')">
+          <div class="opp-sym">${p.Symbol.replace("-USD","")}</div>
+          <div class="opp-sig ${sigCls}">${sig || "—"}</div>
+          <div class="opp-price">${fmtPrice(p.LivePrice || p.Entry)}</div>
+          <div class="opp-conf ${confCls}">${p.Confidence ? fmt(p.Confidence,0)+"%" : "—"}</div>
+        </div>`;
+    }).join("");
+}
+
+function quickSwitchSymbol(sym) {
+    showToast(`🔍 Switching to ${sym}…`, "info");
+    currentSymbol = sym;
+    const inp = document.getElementById("s0-manual-input");
+    if (inp) inp.value = sym;
+    loadStage1(sym, currentMode || "SWING");
+}
+
+// =============================================================================
+// STAGE 5 — Accuracy Dashboard
+// =============================================================================
+
+let _accLoading = false;
+
+async function loadAccuracyDashboard() {
+    if (_accLoading) return;
+    _accLoading = true;
+
+    try {
+        const [stats, modes, trend] = await Promise.all([
+            apiFetch("/dashboard_stats"),
+            apiFetch("/mode_accuracy"),
+            apiFetch("/accuracy_trend?limit=20"),
+        ]);
+
+        if (stats) populateAccuracyStats(stats);
+        if (modes) populateAccuracyModes(modes);
+        if (trend) populateAccuracyTrend(trend);
+    } finally {
+        _accLoading = false;
+    }
+}
+
+function populateAccuracyStats(s) {
+    const acc  = parseFloat(s.Accuracy) || 0;
+    const wins = s.Wins   || 0;
+    const loss = s.Losses || 0;
+    const open = s.Open   || 0;
+    const total = s.Total || 0;
+    const closed = wins + loss;
+
+    set("acc-pct",    acc > 0 ? `${fmt(acc,1)}%` : "N/A",
+        acc >= 60 ? "val-up" : acc >= 40 ? "val-neutral" : "val-down");
+    set("acc-total",  total);
+    set("acc-wins",   wins,  "val-up");
+    set("acc-losses", loss,  "val-down");
+    set("acc-closed-sub", closed > 0 ? `${closed} closed trades` : "No closed trades yet");
+    set("acc-open-sub",   open > 0   ? `${open} open trades`     : "No open trades");
+
+    // Win/Loss bar
+    const winBar  = document.getElementById("acc-bar-win");
+    const lossBar = document.getElementById("acc-bar-loss");
+    const winLbl  = document.getElementById("acc-bar-lbl-win");
+    const lossLbl = document.getElementById("acc-bar-lbl-loss");
+    if (winBar && lossBar && closed > 0) {
+        const winPct  = (wins / closed) * 100;
+        const lossPct = (loss / closed) * 100;
+        winBar.style.width  = winPct  + "%";
+        lossBar.style.width = lossPct + "%";
+        if (winLbl)  winLbl.textContent  = `WIN ${wins}`;
+        if (lossLbl) lossLbl.textContent = `LOSS ${loss}`;
+    }
+}
+
+function populateAccuracyModes(modes) {
+    const modeMap = {
+        "INTRADAY": { valId: "acc-mode-intraday", subId: "acc-mode-intraday-sub" },
+        "SWING":    { valId: "acc-mode-swing",     subId: "acc-mode-swing-sub"     },
+    };
+    for (const [mode, ids] of Object.entries(modeMap)) {
+        const m = modes[mode];
+        if (m) {
+            set(ids.valId, `${fmt(m.Accuracy,1)}%`,
+                m.Accuracy >= 60 ? "val-up" : m.Accuracy >= 40 ? "val-neutral" : "val-down");
+            set(ids.subId, `W:${m.Wins} L:${m.Losses} (${m.Total} total)`);
+        } else {
+            set(ids.valId, "N/A", "val-dim");
+            set(ids.subId, "No data yet");
+        }
+    }
+}
+
+function populateAccuracyTrend(trend) {
+    const wrap = document.getElementById("acc-trend-wrap");
+    const tbody = document.getElementById("acc-table-body");
+    if (!wrap) return;
+
+    const timeline = trend.Timeline || [];
+    if (!timeline.length) {
+        wrap.innerHTML = `<div class="acc-trend-empty">No resolved trades yet. Track predictions to build history.</div>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="acc-empty">No predictions tracked yet.</td></tr>`;
+        return;
+    }
+
+    // Sparkline-style trend dots
+    const dots = timeline.map(t => {
+        const cls = t.Status === "WIN" ? "trend-dot win" : "trend-dot loss";
+        return `<div class="${cls}" title="${t.Stock} — ${t.Status} (${fmt(t.RunningAccuracy,1)}%)"></div>`;
+    }).join("");
+
+    const finalAcc = trend.FinalAccuracy || 0;
+    wrap.innerHTML = `
+      <div class="trend-dots">${dots}</div>
+      <div class="trend-summary">
+        Running accuracy over last ${timeline.length} trades:
+        <span class="${finalAcc >= 60 ? 'val-up' : finalAcc >= 40 ? 'val-neutral' : 'val-down'}">
+          ${fmt(finalAcc,1)}%
+        </span>
+      </div>`;
+
+    // Table rows — most recent first
+    if (tbody) {
+        const rows = [...timeline].reverse().map(t => {
+            const statusCls = t.Status === "WIN" ? "acc-win" : "acc-loss";
+            const date = t.ResolvedAt ? t.ResolvedAt.substring(0,10) : "—";
+            return `<tr>
+              <td>${t.Stock}</td>
+              <td>${t.Mode || "—"}</td>
+              <td class="${statusCls}">${t.Status}</td>
+              <td>${fmt(t.RunningAccuracy,1)}%</td>
+              <td>${date}</td>
+            </tr>`;
+        }).join("");
+        tbody.innerHTML = rows;
+    }
+}
+
 // Internal nav that skips the "symbol required" guard (used after analysis completes)
 function _goToStageForce(n) {
-    for (let i = 0; i <= 4; i++) {
+    for (let i = 0; i <= 5; i++) {
         const p = document.getElementById(`panel-${i}`);
         if (p) p.classList.add("hidden");
         const s = document.getElementById(`pipe-${i}`);
@@ -979,9 +1343,10 @@ function _goToStageForce(n) {
     const cur = document.getElementById(`pipe-${n}`);
     if (cur) cur.classList.add("active");
     const badge = document.getElementById("header-stage-badge");
-    if (badge) badge.textContent = STAGE_LABELS[n];
+    if (badge) badge.textContent = STAGE_LABELS[n] || `STAGE ${n}`;
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (n === 4 && lockedPosition) refreshProtection();
+    if (n === 5) loadAccuracyDashboard();
 }
 
 // =============================================================================

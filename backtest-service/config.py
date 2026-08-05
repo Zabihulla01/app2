@@ -1,111 +1,47 @@
-STOCKS=[
+# config.py — Crypto-only configuration
+# All Indian stock (.NS/.BO) and US stock symbols removed.
+# Primary config is crypto_config.py — this file kept for legacy imports.
 
-"AAPL",
-
-"MSFT",
-
-"GOOGL",
-
-"AMZN",
-
-"TCS.NS",
-
-"INFY.NS",
-
-"RELIANCE.NS"
-
+STOCKS = [
+    "BTC-USD",
+    "ETH-USD",
+    "SOL-USD",
+    "BNB-USD",
+    "XRP-USD",
 ]
 
-
-SECTOR_CONFIG={
-
-
-"AAPL":{
-
-"adx":30,
-
-"hold":12,
-
-"rr":3
-
-},
-
-
-"MSFT":{
-
-"adx":30,
-
-"hold":12,
-
-"rr":3
-
-},
-
-
-"GOOGL":{
-
-"adx":30,
-
-"hold":12,
-
-"rr":3
-
-},
-
-
-"TCS.NS":{
-
-"adx":30,
-
-"hold":12,
-
-"rr":3
-
-},
-
-
-"INFY.NS":{
-
-"adx":30,
-
-"hold":12,
-
-"rr":3
-
-},
-
-
-"RELIANCE.NS":{
-
-"adx":25,
-
-"hold":5,
-
-"rr":2
-
-},
-
-
-"AMZN":{
-
-"adx":20,
-
-"hold":8,
-
-"rr":2
-
+SECTOR_CONFIG = {
+    "BTC-USD": {
+        "adx":  20,
+        "hold": 8,
+        "rr":   2,
+    },
+    "ETH-USD": {
+        "adx":  20,
+        "hold": 8,
+        "rr":   2,
+    },
+    "SOL-USD": {
+        "adx":  22,
+        "hold": 6,
+        "rr":   2,
+    },
+    "BNB-USD": {
+        "adx":  20,
+        "hold": 8,
+        "rr":   2,
+    },
+    "XRP-USD": {
+        "adx":  18,
+        "hold": 6,
+        "rr":   2,
+    },
 }
 
-}
-BROKERAGE = 20
-
-SLIPPAGE = 0.001
-
+BROKERAGE       = 0.001   # 0.1% crypto exchange fee
+SLIPPAGE        = 0.001   # 0.1% slippage
 INITIAL_CAPITAL = 10000
+RISK_PER_TRADE  = 0.01
 
-RISK_PER_TRADE = 0.01
-
-
-PERIOD="60d"
-
-INTERVAL="15m"
+PERIOD   = "90d"
+INTERVAL = "1d"

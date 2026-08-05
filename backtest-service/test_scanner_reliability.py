@@ -1,7 +1,8 @@
 """
 test_scanner_reliability.py
-Scanner reliability tests: missing Confidence, missing RiskScore,
-empty data, and invalid ticker.
+Scanner reliability tests (crypto-only).
+All Indian stock (.NS/.BO) and yfinance.download references removed.
+Data fetching is now handled by coingecko.fetch_ohlcv — mocked here.
 """
 
 import sys
@@ -11,7 +12,7 @@ import pandas as pd
 import numpy as np
 from unittest.mock import patch, MagicMock
 
-# ── Make backtest-service importable ────────────────────────────────────────
+# ── Make backtest-service importable ─────────────────────────────────────────
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backtest-service"))
 import importlib
 main = importlib.import_module("main")
@@ -23,9 +24,9 @@ scan_stock = main.scan_stock
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _make_backtest_result(**overrides):
-    """Return a minimal valid backtest dict, overriding specified keys."""
+    """Return a minimal valid backtest dict for a crypto symbol."""
     base = {
-        "Stock":        "TEST.NS",
+        "Stock":        "BTC-USD",
         "Confidence":   70,
         "RiskScore":    65,
         "WinRate":      55.0,
@@ -34,10 +35,27 @@ def _make_backtest_result(**overrides):
         "ADX":          30.0,
         "RSI":          45.0,
         "MaxDrawdown":  12.0,
-        "Sharpe":       1.1,
+        "EntryPrice":   63000.0,
+        "ATR":          300.0,
+        "Signal":       "BUY",
     }
     base.update(overrides)
     return base
+
+
+def _make_ohlcv_df(rows=300, price=63000.0):
+    """Build a minimal OHLCV DataFrame that fetch_ohlcv would return."""
+    idx = pd.date_range("2024-01-01", periods=rows, freq="1h")
+    return pd.DataFrame(
+        {
+            "Open":   price * 0.999,
+            "High":   price * 1.002,
+            "Low":    price * 0.997,
+            "Close":  price,
+            "Volume": 1_000_000,
+        },
+        index=idx,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -53,8 +71,7 @@ class TestMissingConfidence:
         del payload["Confidence"]
 
         with patch.object(main, "backtest", return_value=payload):
-            result = scan_stock("TEST.NS")
-        # Should not raise; result may be None or a dict
+            result = scan_stock("BTC-USD")
         assert result is None or isinstance(result, dict)
 
     def test_confidence_defaults_to_zero(self):
@@ -63,7 +80,7 @@ class TestMissingConfidence:
         del payload["Confidence"]
 
         with patch.object(main, "backtest", return_value=payload):
-            result = scan_stock("TEST.NS")
+            result = scan_stock("BTC-USD")
 
         if result is not None:
             assert result["Confidence"] == 0
@@ -75,7 +92,7 @@ class TestMissingConfidence:
         del payload["RiskScore"]
 
         with patch.object(main, "backtest", return_value=payload):
-            result = scan_stock("TEST.NS")
+            result = scan_stock("BTC-USD")
         assert result is None
 
 
@@ -91,26 +108,26 @@ class TestMissingRiskScore:
         del payload["RiskScore"]
 
         with patch.object(main, "backtest", return_value=payload):
-            result = scan_stock("TEST.NS")
+            result = scan_stock("ETH-USD")
         assert result is None or isinstance(result, dict)
 
     def test_riskscore_defaults_to_zero(self):
-        payload = _make_backtest_result(Confidence=80)
+        payload = _make_backtest_result(Stock="ETH-USD", Confidence=80)
         del payload["RiskScore"]
 
         with patch.object(main, "backtest", return_value=payload):
-            result = scan_stock("TEST.NS")
+            result = scan_stock("ETH-USD")
 
         if result is not None:
             assert result["RiskScore"] == 0
 
     def test_bull_score_uses_zero_riskscore(self):
         """Score should still be computable (no KeyError) with RiskScore=0."""
-        payload = _make_backtest_result(Confidence=80)
+        payload = _make_backtest_result(Stock="ETH-USD", Confidence=80)
         del payload["RiskScore"]
 
         with patch.object(main, "backtest", return_value=payload):
-            result = scan_stock("TEST.NS")
+            result = scan_stock("ETH-USD")
 
         if result is not None:
             assert isinstance(result["Score"], float)
@@ -118,46 +135,44 @@ class TestMissingRiskScore:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. Empty / insufficient DataFrame  →  "No objects to concatenate" /
-#    "single positional indexer is out-of-bounds"
+# 3. Empty / insufficient OHLCV data from CoinGecko
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestEmptyData:
-    """backtest() called with a stock whose yfinance download is empty."""
+    """backtest() called when fetch_ohlcv returns empty DataFrame."""
 
     def test_empty_dataframe_returns_error_dict(self):
         """
-        When yfinance returns an empty DataFrame, backtest should return a
-        dict with 'error' key, not raise an exception.
+        When fetch_ohlcv returns an empty DataFrame, backtest should return
+        a dict with 'error' key — not raise an exception.
         """
         empty_df = pd.DataFrame()
 
-        with patch("yfinance.download", return_value=empty_df):
-            result = main.backtest("EMPTY.NS")
+        with patch("coingecko.fetch_ohlcv", return_value=empty_df):
+            result = main.backtest("BTC-USD")
 
         assert isinstance(result, dict)
-        # Must not have raised; must contain some indicator of failure
         assert "error" in result or result.get("Status") == "INVALID_STOCK"
 
     def test_scan_stock_survives_empty_dataframe(self):
         """scan_stock must never raise when backtest returns an error dict."""
-        error_payload = {"Stock": "EMPTY.NS", "error": "No market data",
-                         "Confidence": 0, "RiskScore": 0}
+        error_payload = {
+            "Stock":      "SOL-USD",
+            "error":      "No market data",
+            "Confidence": 0,
+            "RiskScore":  0,
+        }
 
         with patch.object(main, "backtest", return_value=error_payload):
-            result = scan_stock("EMPTY.NS")
+            result = scan_stock("SOL-USD")
 
-        # Returns None (skipped) or a partial dict – but never raises
         assert result is None or isinstance(result, dict)
 
-    def test_concat_empty_series_no_exception(self):
+    def test_all_nan_ohlcv_no_exception(self):
         """
-        If all TR component series are empty, backtest should return an
-        error dict, not raise ValueError('No objects to concatenate').
+        All-NaN OHLCV should produce an error dict, not raise ValueError.
         """
-        # Build a DataFrame with enough rows for the walk-forward split
-        # but whose OHLC columns are all NaN so TR series will be empty
-        idx = pd.date_range("2023-01-01", periods=300, freq="15min")
+        idx = pd.date_range("2024-01-01", periods=300, freq="1h")
         df_nan = pd.DataFrame(
             {
                 "Open":   np.nan,
@@ -168,68 +183,61 @@ class TestEmptyData:
             },
             index=idx,
         )
-        df_nan.columns = pd.MultiIndex.from_tuples(
-            [(c, "NANSTOCK.NS") for c in df_nan.columns]
-        )
 
-        with patch("yfinance.download", return_value=df_nan):
+        with patch("coingecko.fetch_ohlcv", return_value=df_nan):
             try:
-                result = main.backtest("NANSTOCK.NS")
-                # Must return a dict, not raise
+                result = main.backtest("BNB-USD")
                 assert isinstance(result, dict)
             except Exception as exc:
                 pytest.fail(f"backtest raised unexpectedly: {exc}")
 
-    def test_atr_rolling_empty_no_exception(self):
+    def test_too_few_rows_no_exception(self):
         """
-        Fewer than 14 rows → rolling(14) returns all-NaN → iloc[-1] would
-        raise.  backtest should return an error dict instead.
+        Fewer than 14 rows → rolling(14) all-NaN → backtest should return
+        an error dict, not raise IndexError.
         """
-        idx = pd.date_range("2023-01-01", periods=5, freq="15min")
+        idx = pd.date_range("2024-01-01", periods=5, freq="1h")
         tiny_df = pd.DataFrame(
             {
-                "Open":   [100.0] * 5,
-                "High":   [102.0] * 5,
-                "Low":    [98.0]  * 5,
-                "Close":  [101.0] * 5,
+                "Open":   [63000.0] * 5,
+                "High":   [63200.0] * 5,
+                "Low":    [62800.0] * 5,
+                "Close":  [63100.0] * 5,
                 "Volume": [1_000_000] * 5,
             },
             index=idx,
         )
-        tiny_df.columns = pd.MultiIndex.from_tuples(
-            [(c, "TINY.NS") for c in tiny_df.columns]
-        )
 
-        with patch("yfinance.download", return_value=tiny_df):
+        with patch("coingecko.fetch_ohlcv", return_value=tiny_df):
             try:
-                result = main.backtest("TINY.NS")
+                result = main.backtest("XRP-USD")
                 assert isinstance(result, dict)
             except Exception as exc:
                 pytest.fail(f"backtest raised unexpectedly: {exc}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. Invalid ticker
+# 4. Invalid / unknown crypto ticker
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestInvalidTicker:
-    """Ticker that yfinance doesn't recognise → empty DataFrame."""
+    """CoinGecko returns empty data for unknown tickers."""
 
     def test_invalid_ticker_backtest_returns_dict(self):
-        """backtest('INVALIDXXX.NS') must return a dict, never raise."""
+        """backtest('INVALID-USD') must return a dict, never raise."""
         empty_df = pd.DataFrame()
 
-        with patch("yfinance.download", return_value=empty_df):
-            result = main.backtest("INVALIDXXX.NS")
+        with patch("coingecko.fetch_ohlcv", return_value=empty_df):
+            result = main.backtest("INVALID-USD")
 
         assert isinstance(result, dict)
 
     def test_invalid_ticker_scan_stock_returns_none_or_partial(self):
-        """scan_stock with an invalid ticker must return None or a partial dict."""
+        """scan_stock with an unknown ticker must return None or a partial dict."""
         empty_df = pd.DataFrame()
 
-        with patch("yfinance.download", return_value=empty_df):
-            result = scan_stock("INVALIDXXX.NS")
+        with patch("coingecko.fetch_ohlcv", return_value=empty_df):
+            result = scan_stock("INVALID-USD")
 
         assert result is None or isinstance(result, dict)
 
@@ -237,9 +245,9 @@ class TestInvalidTicker:
         """scan_stock must never propagate an exception for any ticker."""
         empty_df = pd.DataFrame()
 
-        with patch("yfinance.download", return_value=empty_df):
+        with patch("coingecko.fetch_ohlcv", return_value=empty_df):
             try:
-                scan_stock("GARBAGETICKERZZZ.NS")
+                scan_stock("GARBAGETICKER-USD")
             except Exception as exc:
                 pytest.fail(f"scan_stock raised unexpectedly: {exc}")
 
@@ -249,7 +257,7 @@ class TestInvalidTicker:
         partial dict must contain a 'ScanError' key with the error message.
         """
         with patch.object(main, "backtest", side_effect=RuntimeError("network failure")):
-            result = scan_stock("CRASH.NS")
+            result = scan_stock("CRASH-USD")
 
         assert result is not None, "Expected partial dict, got None"
         assert "ScanError" in result

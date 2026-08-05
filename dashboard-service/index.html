@@ -32,7 +32,7 @@
     <div class="pipe-arrow">›</div>
     <div class="pipe-step" id="pipe-2" onclick="goToStage(2)">
       <span class="pipe-num">2</span>
-      <span class="pipe-lbl">Trade Setup</span>
+      <span class="pipe-lbl">Signal</span>
     </div>
     <div class="pipe-arrow">›</div>
     <div class="pipe-step" id="pipe-3" onclick="goToStage(3)">
@@ -42,7 +42,12 @@
     <div class="pipe-arrow">›</div>
     <div class="pipe-step" id="pipe-4" onclick="goToStage(4)">
       <span class="pipe-num">4</span>
-      <span class="pipe-lbl">Protection</span>
+      <span class="pipe-lbl">Monitor</span>
+    </div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" id="pipe-5" onclick="goToStage(5)">
+      <span class="pipe-num">📊</span>
+      <span class="pipe-lbl">Accuracy</span>
     </div>
   </div>
 </header>
@@ -283,6 +288,7 @@
 
   <!-- Decision banner -->
   <div class="decision-banner" id="s2-decision-banner">
+    <div class="dec-signal-tag" id="s2-signal-tag" style="display:none"></div>
     <div class="dec-action" id="s2-action">—</div>
     <div class="dec-conf" id="s2-conf-pct">—</div>
     <div class="dec-reason" id="s2-reason">—</div>
@@ -421,13 +427,13 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     STAGE 4 — AI Protection Manager
+     STAGE 4 — Real-time Trade Monitor
 ════════════════════════════════════════════════════════════════════════════ -->
 <div class="stage-panel hidden" id="panel-4">
   <div class="stage-header">
     <div class="stage-badge s4">STAGE 4</div>
-    <div class="stage-title">AI Protection Manager</div>
-    <div class="stage-desc">Protecting capital and maximising profit — monitoring continuously</div>
+    <div class="stage-title">Real-time Trade Monitor</div>
+    <div class="stage-desc">Live P&amp;L tracking — AI protection alerts — top opportunities</div>
     <div class="stage-sym" id="s4-sym-label">—</div>
   </div>
 
@@ -437,54 +443,64 @@
     <div class="protect-reason" id="s4-reason">Waiting for first update…</div>
   </div>
 
+  <!-- ── Live P&L Bar ─────────────────────────────────────────────── -->
+  <div class="pnl-bar-wrap">
+    <div class="pnl-bar-label">Live P&amp;L</div>
+    <div class="pnl-bar-track">
+      <div class="pnl-bar-fill" id="s4-pnl-bar-fill"></div>
+    </div>
+    <div class="pnl-bar-value" id="s4-pnl-bar-value">—</div>
+    <div class="pnl-bar-source" id="s4-pnl-source">● live</div>
+  </div>
+
   <!-- Live metrics -->
-  <div class="grp-lbl">📡 Live Position Monitor</div>
+  <div class="grp-lbl">📡 Live Position</div>
   <div class="analysis-grid g4">
     <div class="a-card hi">
       <div class="a-lbl">Live Price</div>
       <div class="a-val large" id="s4-price">—</div>
-      <div class="a-sub">Current market price</div>
+      <div class="a-sub" id="s4-price-source">Kraken WS</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Live PnL</div>
+      <div class="a-lbl">Live P&amp;L</div>
       <div class="a-val" id="s4-pnl">—</div>
-      <div class="a-sub">% from entry</div>
+      <div class="a-sub" id="s4-pnl-usd">$ change</div>
     </div>
     <div class="a-card">
       <div class="a-lbl">Holding Time</div>
       <div class="a-val" id="s4-hold">—</div>
-      <div class="a-sub">Minutes since lock</div>
+      <div class="a-sub">Since lock</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">Higher TF Trend</div>
+      <div class="a-lbl">Higher TF</div>
       <div class="a-val" id="s4-htf">—</div>
       <div class="a-sub">Macro direction</div>
     </div>
   </div>
 
   <!-- Distances -->
-  <div class="grp-lbl">📏 Distances to Levels</div>
+  <div class="grp-lbl">📏 Distance to Levels</div>
   <div class="analysis-grid g4">
     <div class="a-card">
-      <div class="a-lbl">To TP1</div>
+      <div class="a-lbl">→ TP1</div>
       <div class="a-val val-up" id="s4-d-tp1">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">To TP2</div>
+      <div class="a-lbl">→ TP2</div>
       <div class="a-val val-up" id="s4-d-tp2">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">To TP3</div>
+      <div class="a-lbl">→ TP3</div>
       <div class="a-val val-up" id="s4-d-tp3">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">To Stop Loss</div>
+      <div class="a-lbl">→ Stop Loss</div>
       <div class="a-val val-down" id="s4-d-sl">—</div>
     </div>
   </div>
 
   <!-- Indicators -->
-  <div class="grp-lbl">⚡ Market Indicators</div>
+  <div class="grp-lbl">⚡ Indicators</div>
   <div class="analysis-grid g4">
     <div class="a-card">
       <div class="a-lbl">RSI</div>
@@ -502,13 +518,13 @@
       <div class="a-sub" id="s4-macd-sub">vs Signal line</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">ATR (Volatility)</div>
+      <div class="a-lbl">ATR</div>
       <div class="a-val" id="s4-atr">—</div>
-      <div class="a-sub" id="s4-atr-sub">Average True Range</div>
+      <div class="a-sub" id="s4-atr-sub">Volatility</div>
     </div>
   </div>
 
-  <!-- Locked position recap (compact) -->
+  <!-- Locked position recap -->
   <div class="grp-lbl">🔒 Locked Trade Reference</div>
   <div class="analysis-grid g4">
     <div class="a-card">
@@ -520,13 +536,19 @@
       <div class="a-val val-down" id="s4-ref-sl">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">TP2 Target</div>
+      <div class="a-lbl">TP2</div>
       <div class="a-val val-up" id="s4-ref-tp2">—</div>
     </div>
     <div class="a-card">
-      <div class="a-lbl">TP3 Target</div>
+      <div class="a-lbl">TP3</div>
       <div class="a-val val-up" id="s4-ref-tp3">—</div>
     </div>
+  </div>
+
+  <!-- ── Top Opportunities ───────────────────────────────────────── -->
+  <div class="grp-lbl">🔥 Top Opportunities Right Now</div>
+  <div id="s4-opportunities" class="opp-grid">
+    <div class="opp-loading">Scanning market…</div>
   </div>
 
   <!-- Controls -->
@@ -537,16 +559,110 @@
     <div class="s4-auto-wrap">
       <label class="toggle-label">
         <input type="checkbox" id="s4-auto-toggle" onchange="toggleAutoRefresh()" />
-        Auto-refresh every 60 s
+        Auto-refresh every 60s
       </label>
     </div>
     <button class="btn-close-trade" onclick="closeTrade()">
-      ✅ Close Trade &amp; Return to Stage 0
+      ✅ Close Trade &amp; Return
     </button>
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STAGE 5 — Accuracy Dashboard
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="stage-panel hidden" id="panel-5">
+  <div class="stage-header">
+    <div class="stage-badge s5">ACCURACY</div>
+    <div class="stage-title">Prediction Accuracy Dashboard</div>
+    <div class="stage-desc">Track how accurate your AI trading signals are over time</div>
+  </div>
+
+  <!-- Overall stats -->
+  <div class="grp-lbl">📊 Overall Performance</div>
+  <div class="analysis-grid g4">
+    <div class="a-card hi">
+      <div class="a-lbl">Accuracy</div>
+      <div class="a-val large" id="acc-pct">—</div>
+      <div class="a-sub">Win rate</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Total Trades</div>
+      <div class="a-val" id="acc-total">—</div>
+      <div class="a-sub" id="acc-closed-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Wins</div>
+      <div class="a-val val-up" id="acc-wins">—</div>
+      <div class="a-sub">Target hit</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">Losses</div>
+      <div class="a-val val-down" id="acc-losses">—</div>
+      <div class="a-sub" id="acc-open-sub">—</div>
+    </div>
+  </div>
+
+  <!-- Win/Loss visual bar -->
+  <div class="acc-bar-wrap">
+    <div class="acc-bar-track">
+      <div class="acc-bar-win"  id="acc-bar-win"></div>
+      <div class="acc-bar-loss" id="acc-bar-loss"></div>
+    </div>
+    <div class="acc-bar-labels">
+      <span class="acc-bar-lbl-win"  id="acc-bar-lbl-win">WIN 0</span>
+      <span class="acc-bar-lbl-loss" id="acc-bar-lbl-loss">LOSS 0</span>
+    </div>
+  </div>
+
+  <!-- Mode breakdown -->
+  <div class="grp-lbl">🔀 By Trading Mode</div>
+  <div class="analysis-grid g2" id="acc-mode-grid">
+    <div class="a-card">
+      <div class="a-lbl">INTRADAY</div>
+      <div class="a-val" id="acc-mode-intraday">—</div>
+      <div class="a-sub" id="acc-mode-intraday-sub">—</div>
+    </div>
+    <div class="a-card">
+      <div class="a-lbl">SWING</div>
+      <div class="a-val" id="acc-mode-swing">—</div>
+      <div class="a-sub" id="acc-mode-swing-sub">—</div>
+    </div>
+  </div>
+
+  <!-- Accuracy trend timeline -->
+  <div class="grp-lbl">📈 Accuracy Trend (Last 20 Trades)</div>
+  <div class="acc-trend-wrap" id="acc-trend-wrap">
+    <div class="acc-trend-empty">No resolved trades yet. Track predictions to build history.</div>
+  </div>
+
+  <!-- Recent predictions table -->
+  <div class="grp-lbl">📋 Recent Predictions</div>
+  <div class="acc-table-wrap">
+    <table class="acc-table" id="acc-table">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Mode</th>
+          <th>Status</th>
+          <th>Accuracy</th>
+          <th>Resolved</th>
+        </tr>
+      </thead>
+      <tbody id="acc-table-body">
+        <tr><td colspan="5" class="acc-empty">No predictions tracked yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Controls -->
+  <div class="s4-controls">
+    <button class="btn-refresh" onclick="loadAccuracyDashboard()">🔄 Refresh</button>
+    <button class="btn-close-trade" onclick="goToStage(0)">← Back to Search</button>
+  </div>
+</div>
+
 <!-- Versioned URL prevents browsers/nginx from reusing a broken cached app.js. -->
-<script src="app.js?v=20260803-2"></script>
+<script src="app.js?v=20260804-1"></script>
 </body>
 </html>
