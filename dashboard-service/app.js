@@ -817,7 +817,9 @@ function populateStage1(d) {
     const sweep = d.SMC_Sweep || "None";
     set("s1-smc-liq", sweep, sweep.includes("Bull") ? "val-up" : sweep === "None" ? "val-neutral" : "val-down");
     const breaker = d.SMC_Breaker || "None";
-    set("s1-smc-liq-sub", `Breaker: ${breaker}`, breaker.includes("Bull") ? "val-up" : "val-neutral");
+    const zones = `High: ${fmtPrice(d.SMC_LiqHigh)}  Low: ${fmtPrice(d.SMC_LiqLow)}`;
+    const mitigation = d.SMC_Mitigation || "None";
+    set("s1-smc-liq-sub", `${zones} | Breaker: ${breaker} | Mitigation: ${mitigation}`, breaker.includes("Bull") ? "val-up" : "val-neutral");
 
     // ── Trend ─────────────────────────────────────────────────────────────
     set("s1-trend", d.Trend || "N/A", trendColor(d.Trend));
@@ -840,6 +842,8 @@ function populateStage1(d) {
     set("s1-ema9-sub",  `Price ${price > d.EMA9?"above ✓":"below ✗"} EMA9`,  price > d.EMA9?"val-up":"val-down");
     set("s1-ema21",  fmtPrice(d.EMA21));
     set("s1-ema21-sub", `Price ${price > d.EMA21?"above ✓":"below ✗"} EMA21`, price > d.EMA21?"val-up":"val-down");
+    set("s1-ema20",  fmtPrice(d.EMA20));
+    set("s1-ema20-sub", `Price ${price > d.EMA20?"above ✓":"below ✗"} EMA20`, price > d.EMA20?"val-up":"val-down");
     set("s1-ema50",  fmtPrice(d.EMA50));
     set("s1-ema50-sub", `Price ${price > d.EMA50?"above ✓":"below ✗"} EMA50`, price > d.EMA50?"val-up":"val-down");
     set("s1-ema200", fmtPrice(d.EMA200));

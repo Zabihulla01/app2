@@ -2319,6 +2319,7 @@ def stage1_analyze(stock: str, mode: str = "INTRADAY"):
     df_1d = fetch_ohlcv_binance(sym, "1d")
     df_4h = fetch_ohlcv_binance(sym, "4h")
     df_15m= fetch_ohlcv_binance(sym, "15m")
+    df_5m = fetch_ohlcv_binance(sym, "5m")
 
     # ── 2. Backtest metrics ────────────────────────────────────────────────
     try:
@@ -2339,7 +2340,7 @@ def stage1_analyze(stock: str, mode: str = "INTRADAY"):
 
     # ── 4. Run Stage 1 analysis engine ────────────────────────────────────
     multi_tf_dfs = {}
-    for tf, df_tf in [("15m", df_15m), ("1h", df_1h), ("4h", df_4h), ("1D", df_1d)]:
+    for tf, df_tf in [("5m", df_5m), ("15m", df_15m), ("1h", df_1h), ("4h", df_4h), ("1D", df_1d)]:
         if df_tf is not None and not df_tf.empty:
             multi_tf_dfs[tf] = df_tf
 
@@ -2417,9 +2418,11 @@ def stage1_analyze(stock: str, mode: str = "INTRADAY"):
         "EMA_Alignment":  tr.get("ema_alignment"),
         "EMA9":           tr.get("ema9"),
         "EMA21":          tr.get("ema21"),
+        "EMA20":          tr.get("ema20"),
         "EMA50":          tr.get("ema50"),
         "EMA200":         tr.get("ema200"),
         "Supertrend":     tr.get("supertrend"),
+        "Supertrend_val": tr.get("supertrend_val"),
         "ADX":            tr.get("adx"),
         "ADX_Strength":   tr.get("adx_strength"),
         "PlusDI":         tr.get("plus_di"),

@@ -213,6 +213,7 @@ def calc_trend(df: pd.DataFrame, cache: Dict[str, Any]):
 
     ema9   = float(df["EMA_9"].iloc[-1])   if "EMA_9"   in df.columns else close
     ema21  = float(df["EMA_21"].iloc[-1])  if "EMA_21"  in df.columns else close
+    ema20  = float(df["EMA_20"].iloc[-1])  if "EMA_20"  in df.columns else close
     ema50  = float(df["EMA_50"].iloc[-1])  if "EMA_50"  in df.columns else close
     ema200 = float(df["EMA_200"].iloc[-1]) if "EMA_200" in df.columns else close
 
@@ -224,16 +225,16 @@ def calc_trend(df: pd.DataFrame, cache: Dict[str, Any]):
     st_val = float(df["Supertrend"].iloc[-1])   if "Supertrend"     in df.columns else 0
 
     # EMA alignment
-    if ema9 > ema21 > ema50 > ema200:
+    if ema20 > ema50 > ema200:
         alignment = "Full Bullish"
         align_score = 100
-    elif ema9 > ema21 > ema50:
+    elif ema20 > ema50:
         alignment = "Bullish"
         align_score = 75
-    elif ema9 < ema21 < ema50 < ema200:
+    elif ema20 < ema50 < ema200:
         alignment = "Full Bearish"
         align_score = 0
-    elif ema9 < ema21 < ema50:
+    elif ema20 < ema50:
         alignment = "Bearish"
         align_score = 25
     else:
@@ -284,6 +285,7 @@ def calc_trend(df: pd.DataFrame, cache: Dict[str, Any]):
         "ema_alignment":    alignment,
         "ema9":             round(ema9, 4),
         "ema21":            round(ema21, 4),
+        "ema20":            round(ema20, 4),
         "ema50":            round(ema50, 4),
         "ema200":           round(ema200, 4),
         "above_ema9":       above_ema9,
@@ -634,6 +636,9 @@ def calc_confidence(cache: Dict[str, Any], backtest: Dict[str, Any]):
     mom_score   = cache.get("momentum", {}).get("score", 50)
     health      = cache.get("market_health", {}).get("overall_score", 0)
     mtf_align   = cache.get("multi_timeframe", {}).get("alignment_score", 0)
+    pa          = cache.get("price_action", {})
+    smc         = cache.get("smc", {})
+    volume      = cache.get("volume", {})
 
     win_rate = backtest.get("win_rate", 0) or 0
     pf       = backtest.get("profit_factor", 0) or 0
@@ -641,13 +646,31 @@ def calc_confidence(cache: Dict[str, Any], backtest: Dict[str, Any]):
 
     bt_score = min((win_rate * 0.5 + min(pf * 20, 50) + min(abs(sharpe) * 10, 30)) / 1.3, 100)
 
-    # Weighted confidence
+    # Include structure, SMC and volume so confidence reflects all Stage 1
+    # evidence, not only trend/momentum/backtest metrics.
+    structure_score = 50
+    if pa.get("structure_bias") in ("BULLISH", "BEARISH"):
+        structure_score = 75
+    if pa.get("bos", "None") != "None":
+        structure_score += 10
+    if pa.get("choch", "None") != "None":
+        structure_score -= 10
+    smc_score = 50
+    if smc.get("liquidity_sweep", "None") != "None":
+        smc_score += 15
+    if any(smc.get(k) is not None for k in ("order_block_bull", "order_block_bear", "fvg_bull", "fvg_bear")):
+        smc_score += 10
+    volume_score = min(max(float(volume.get("rvol", 1.0)) * 35, 0), 100)
+
     confidence = (
-        trend_score  * 0.25 +
-        mom_score    * 0.20 +
-        health       * 0.20 +
-        mtf_align    * 0.20 +
-        bt_score     * 0.15
+        trend_score     * 0.20 +
+        mom_score       * 0.15 +
+        health          * 0.15 +
+        mtf_align       * 0.15 +
+        structure_score * 0.10 +
+        smc_score       * 0.10 +
+        volume_score    * 0.05 +
+        bt_score        * 0.10
     )
     confidence = round(min(max(confidence, 0), 100), 1)
 
@@ -674,6 +697,12 @@ def calc_confidence(cache: Dict[str, Any], backtest: Dict[str, Any]):
         reasons.append(f"Multi-TF aligned ({mtf_align:.0f}%)")
     elif mtf_align < 50:
         reasons.append(f"Conflicting timeframes ({mtf_align:.0f}%)")
+
+    if pa.get("bos", "None") != "None":
+        reasons.append(f"Price structure: {pa['bos']}")
+    if smc.get("liquidity_sweep", "None") != "None":
+        reasons.append(f"SMC liquidity event: {smc['liquidity_sweep']}")
+    reasons.append(f"Volume participation: RVOL {float(volume.get('rvol', 1.0)):.2f}x")
 
     if win_rate >= 55:
         reasons.append(f"Good backtest win rate ({win_rate:.0f}%)")

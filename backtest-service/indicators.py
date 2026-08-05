@@ -23,6 +23,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # ── Moving Averages ───────────────────────────────────────────────────
     df["EMA_9"]   = close.ewm(span=9,   adjust=False).mean()
     df["EMA_21"]  = close.ewm(span=21,  adjust=False).mean()
+    df["EMA_20"]  = close.ewm(span=20,  adjust=False).mean()
     df["EMA_50"]  = close.ewm(span=50,  adjust=False).mean()
     df["EMA_200"] = close.ewm(span=200, adjust=False).mean()
     # Legacy aliases used by backtest engine
